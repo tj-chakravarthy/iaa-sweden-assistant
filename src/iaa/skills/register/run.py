@@ -79,7 +79,11 @@ def _aliases(run: Run) -> dict[str, str]:
 def propose(run: Run) -> tuple[list[Proposal], str]:
     box = _sources(run)
     res = reconcile(run.run_id, _members(run), box.export, box.records, _aliases(run), run.known(), run.today)
-    return res.proposals, render(run.today, res.aggregates, run.llm)
+    try:
+        llm = run.llm
+    except Exception:
+        llm = None
+    return res.proposals, render(run.today, res.aggregates, llm)
 
 
 class _Applier:

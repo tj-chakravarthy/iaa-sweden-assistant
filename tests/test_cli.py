@@ -78,3 +78,12 @@ def test_error_is_raised_in_full_on_a_maintainers_own_machine(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(ValueError, match="the detail"):
         cli.main()
+
+
+def test_public_dry_run_never_prints_a_skill_brief(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("IAA_ENVIRONMENT", "prod")
+    skill = SimpleNamespace(name="synthetic", kinds=set(), propose=lambda run: ([], "synthetic@example.org"))
+    cli.raise_proposals(SimpleNamespace(dry_run=True, run_id="synthetic"), [skill])
+    assert "example.org" not in capsys.readouterr().out

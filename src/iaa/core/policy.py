@@ -19,6 +19,7 @@ Small and import-free so tests can assert on it.
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Iterable
 
@@ -30,6 +31,23 @@ KNOWN_KINDS = {
     "register-change",  # skills/register: changes to the members tab
     # future: "event-listing", "email-draft", "linkedin-post", "action-item"
 }
+
+COUNT_LABELS = frozenset(
+    {
+        "total",
+        "active",
+        "inactive",
+        "records",
+        "events",
+        "registered",
+        "matched",
+        "attended",
+        "unknown",
+        "proposals",
+        "expiring",
+        "share",
+    }
+)
 
 
 def approved(p: Proposal) -> bool:
@@ -54,9 +72,11 @@ def assert_known_kind(kind: str) -> None:
 def assert_counts_only(data: object) -> None:
     """Numbers under labels only, however nested. Strings, lists and records are refused."""
     if isinstance(data, dict):
+        if any(key not in COUNT_LABELS for key in data):
+            raise ValueError("unapproved count label")
         for v in data.values():
             assert_counts_only(v)
-    elif not isinstance(data, (int, float)):
+    elif isinstance(data, bool) or not isinstance(data, (int, float)) or not math.isfinite(data) or data < 0:
         raise ValueError(f"not a count: a {type(data).__name__} was about to be sent to a model")
 
 

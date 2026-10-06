@@ -131,3 +131,19 @@ def test_brief_has_no_personal_data():
     for m in ms:
         assert m.name not in text
         assert m.email_preferred not in text
+
+
+def test_optional_summary_receives_only_fixed_count_labels_and_can_fail():
+    from iaa.core.policy import assert_counts_only
+
+    class Summary:
+        def summarize(self, instructions, counts):
+            assert_counts_only(counts)
+            assert "example.org" not in str(counts)
+            raise RuntimeError("synthetic failure")
+
+    members, records = load()
+    records[-1].payload["event"] = "Private event synthetic@example.org"
+    result = reconcile("test", members, None, records, {}, as_of=AS_OF)
+    text = render(AS_OF, result.aggregates, Summary())
+    assert "Optional summary unavailable" in text

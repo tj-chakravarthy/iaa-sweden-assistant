@@ -76,9 +76,9 @@ def raise_proposals(run: Run, skills: Sequence[Skill], details: bool = False) ->
         proposals, brief = s.propose(run)
         if stray := {p.kind for p in proposals} - s.kinds:
             raise ValueError(f"skill {s.name} raised proposals of kinds it does not own: {sorted(stray)}")
-        if run.dry_run:
+        if run.dry_run and not policy.logs_are_public():
             typer.echo(brief)
-        else:
+        elif not run.dry_run:
             run.book.append_proposals(proposals)
             if brief:
                 run.book.write_text(f"brief_{s.name}_{run.today:%Y-%m}", brief)

@@ -40,5 +40,20 @@ def render(run_date: date, agg: dict, llm: LLMClient | None = None) -> str:
     L += ["", "## For review (proposals tab)", ""]
     L += [f"- {v} x {k}" for k, v in sorted(agg["proposals_by_category"].items(), key=lambda x: -x[1])]
     if llm:
-        L += ["", "## Summary", "", llm.summarize(SUMMARY_PROMPT, agg)]
+        counts = {
+            "records": agg["records"],
+            "active": agg["active"],
+            "expiring": agg["expiring_31_dec"],
+            "events": {
+                "total": len(agg["events"]),
+                "registered": sum(event.get("registered", 0) for event in agg["events"].values()),
+                "attended": sum(event.get("attended", 0) for event in agg["events"].values()),
+            },
+            "proposals": sum(agg["proposals_by_category"].values()),
+        }
+        try:
+            summary = llm.summarize(SUMMARY_PROMPT, counts)
+        except Exception:
+            summary = "Optional summary unavailable. The counts above are complete."
+        L += ["", "## Summary", "", summary]
     return "\n".join(L) + "\n"

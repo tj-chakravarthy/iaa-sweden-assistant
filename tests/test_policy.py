@@ -69,7 +69,22 @@ def test_validation_errors_do_not_quote_the_row():
 
 
 def test_a_model_is_shown_counts_and_nothing_else():
-    assert_counts_only({"active": 10, "by_region": {"Stockholm": 3, "Skåne": 2}, "share": 0.4})
+    assert_counts_only({"active": 10, "events": {"registered": 3, "attended": 2}, "share": 0.4})
     for leak in ({"member": "Anna Lindqvist"}, {"emails": ["a@example.org"]}, {"by_region": {"x": None}}):
         with pytest.raises(ValueError):
             assert_counts_only(leak)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"synthetic@example.org": 1},
+        {"events": {"Synthetic Person": 1}},
+        {"active": float("nan")},
+        {"active": -1},
+        {"active": True},
+    ],
+)
+def test_count_labels_and_values_are_restricted(data):
+    with pytest.raises(ValueError):
+        assert_counts_only(data)
