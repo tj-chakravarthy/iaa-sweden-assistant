@@ -1,0 +1,23 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+      - run: uv python install 3.12
+      - run: uv sync --locked --extra dev
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+      - run: uv run iaa register selftest
+      - name: no data files outside tests/fixtures
+        run: |
+          set -e
+          if git ls-files | grep -Ei '\.(csv|xlsx|xls|json)$' | grep -vE '^tests/fixtures/[^/]+\.csv$' ; then
+            echo "::error::data files outside tests/fixtures are not allowed"; exit 1; fi

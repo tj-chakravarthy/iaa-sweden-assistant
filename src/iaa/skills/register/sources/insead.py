@@ -1,0 +1,81 @@
+"""Parse the INSEAD "Download Alumni Details" export (CSV or XLSX).
+
+Quirks (October 2026 export):
+- Three preamble rows before the header. The header row starts with ID.
+- The preamble says Membership Status = A but the filter is not applied.
+  Read the Membership column.
+- Four email columns. Alumni often register for events with a fifth.
+- Postal/city come as Home and Preferred. Home is the better region signal.
+- Surnames may be transliterated (Sjöberg -> Sjoeberg).
+- Dates are 12/31/2026 in the CSV and date cells in the XLSX. Both are stored
+  as 2026-12-31.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+
+from ....core.normalize import iso_date, norm_email, region
+from ....core.policy import assert_minimised
+from ....core.tabular import read_rows
+from ..models import Member
+
+# Columns that are read. Nothing else leaves the parser.
+KEEP = {
+    "ID": "insead_id",
+    "Programme": "programme",
+    "Promotion": "promotion",
+    "NAA / IAA": "naa",
+    "Membership": "status",
+    "Start Date Membership": "member_start",
+    "Expire Date Membership": "member_expire",
+    "Tender Type": "tender_type",
+    "Company": "company",
+    "Industry name": "industry",
+    "Function": "function",
+    "Home City": "city",
+    "Home Country": "country",
+    "Preferred Email": "email_preferred",
+    "Insead E-mail": "email_insead",
+}
+
+
+def _frame(raw: bytes) -> pd.DataFrame:
+    rows = read_rows(raw)
+    hdr_i = next((i for i, r in enumerate(rows) if r and str(r[0]).strip() == "ID"), None)
+    if hdr_i is None:
+        raise ValueError("not an INSEAD export: no header row starting with ID")
+    width = len(rows[hdr_i])
+    body = [(r + [""] * width)[:width] for r in rows[hdr_i + 1 :]]
+    df = pd.DataFrame(body, columns=[str(c) for c in rows[hdr_i]])
+    df = df[df["ID"].astype(str).str.strip() != ""].copy()
+    return df.astype(str)
+
+
+def parse_insead_export(raw: bytes) -> list[Member]:
+    assert_minimised([*KEEP, *KEEP.values()])  # source columns kept, and their names in the register
+    df = _frame(raw)
+    members: list[Member] = []
+    for _, r in df.iterrows():
+        first = (r.get("Primary First Name") or "").strip()
+        last = (r.get("Primary Last Name") or "").strip()
+        pref = (r.get("Preferred First Name") or "").strip()
+        name = f"{first} {last}".strip() or f"{pref} {last}".strip()
+        extra = [norm_email(r.get(c, "")) for c in ("Business E-mail", "Home e-mail")]
+        kw = {v: (r.get(k) or "").strip() for k, v in KEEP.items()}
+        kw["email_preferred"] = norm_email(kw["email_preferred"])
+        kw["email_insead"] = norm_email(kw["email_insead"])
+        kw["member_start"] = iso_date(kw["member_start"])
+        kw["member_expire"] = iso_date(kw["member_expire"])
+        members.append(
+            Member(
+                name=name,
+                region=region(
+                    r.get("Home Country") or r.get("Preferred Country"),
+                    r.get("Home Postal") or r.get("Preferred Postal"),
+                ),
+                aliases=[e for e in extra if e and e not in (kw["email_preferred"], kw["email_insead"])],
+                **kw,
+            )
+        )
+    return members

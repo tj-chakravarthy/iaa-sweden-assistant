@@ -1,0 +1,44 @@
+name: monthly-run
+# Applies last month's decisions, then reconciles and writes this month's brief.
+# Environment "prod" requires a reviewer before secrets are released.
+# The log is public, so it prints counts only.
+#
+# Manual for now. This job writes to the real register. Add the schedule back
+# when the dev register test has passed (docs/dev-register.md):
+#   schedule:
+#     - cron: "0 6 1 * *"
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print counts instead of writing proposals and the brief"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency: monthly-run
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+      - run: uv python install 3.12
+      - run: uv sync --locked --extra llm
+      - name: run
+        env:
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          IAA_REGISTER_SHEET_ID: ${{ vars.IAA_REGISTER_SHEET_ID }}
+          IAA_INBOX_FOLDER_ID: ${{ vars.IAA_INBOX_FOLDER_ID }}
+          IAA_EVENTBRITE_TOKEN: ${{ secrets.IAA_EVENTBRITE_TOKEN }}
+          IAA_EVENTBRITE_ORG_ID: ${{ vars.IAA_EVENTBRITE_ORG_ID }}
+          IAA_MAILCHIMP_API_KEY: ${{ secrets.IAA_MAILCHIMP_API_KEY }}
+          IAA_MAILCHIMP_LIST_ID: ${{ vars.IAA_MAILCHIMP_LIST_ID }}
+          IAA_LLM_PROVIDER: ${{ vars.IAA_LLM_PROVIDER }}
+          IAA_GEMINI_API_KEY: ${{ secrets.IAA_GEMINI_API_KEY }}
+          IAA_LLM_PERSONAL_DATA: "false"
+          IAA_ENVIRONMENT: prod
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then uv run iaa register reconcile --dry-run; else uv run iaa run-all; fi

@@ -1,0 +1,27 @@
+# Allowlist: ignore everything at the top level, then re-include only the
+# project. Anything else in this folder is local and is never committed.
+/*
+!/.gitignore
+!/.env.example
+!/.github/
+!/.pre-commit-config.yaml
+!/LICENSE
+!/README.md
+!/pyproject.toml
+!/uv.lock
+!/docs/
+!/src/
+!/tests/
+
+# no data files outside the fixtures
+.env
+*.json
+*.csv
+*.xlsx
+*.xls
+!/tests/fixtures/*.csv
+
+# python junk
+__pycache__/
+.pytest_cache/
+.ruff_cache/

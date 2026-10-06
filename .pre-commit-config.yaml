@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10 # same ruff as uv.lock
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: no-data-files
+        name: refuse data files outside tests/fixtures
+        entry: >-
+          bash -c 'for f in "$@"; do case "$f" in tests/fixtures/*.csv) ;;
+          *.csv|*.xlsx|*.xls|*.json) echo "data file not allowed: $f"; exit 1;; esac; done' --
+        language: system
+        files: \.(csv|xlsx|xls|json)$
