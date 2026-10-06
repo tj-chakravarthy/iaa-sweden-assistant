@@ -46,9 +46,25 @@ def _frame(raw: bytes) -> pd.DataFrame:
     if hdr_i is None:
         raise ValueError("not an INSEAD export: no header row starting with ID")
     width = len(rows[hdr_i])
-    body = [(r + [""] * width)[:width] for r in rows[hdr_i + 1 :]]
-    df = pd.DataFrame(body, columns=[str(c) for c in rows[hdr_i]])
-    df = df[df["ID"].astype(str).str.strip() != ""].copy()
+    header = [column.strip() for column in rows[hdr_i]]
+    required = set(KEEP) | {
+        "Primary First Name",
+        "Primary Last Name",
+        "Preferred First Name",
+        "Business E-mail",
+        "Home e-mail",
+        "Home Postal",
+        "Preferred Postal",
+        "Preferred Country",
+    }
+    if required - set(header) or len([column for column in header if column]) != len(set(header) - {""}):
+        raise ValueError("invalid INSEAD export columns")
+    body = [row for row in rows[hdr_i + 1 :] if any(value.strip() for value in row)]
+    if not body or any(len(row) != width or not row[0].strip() for row in body):
+        raise ValueError("empty or incomplete INSEAD export")
+    df = pd.DataFrame(body, columns=header)
+    if df["ID"].str.strip().duplicated().any():
+        raise ValueError("duplicate INSEAD IDs")
     return df.astype(str)
 
 
@@ -60,7 +76,9 @@ def parse_insead_export(raw: bytes) -> list[Member]:
         first = (r.get("Primary First Name") or "").strip()
         last = (r.get("Primary Last Name") or "").strip()
         pref = (r.get("Preferred First Name") or "").strip()
-        name = f"{first} {last}".strip() or f"{pref} {last}".strip()
+        name = f"{first or pref} {last}".strip()
+        if not name:
+            raise ValueError("missing member name")
         extra = [norm_email(r.get(c, "")) for c in ("Business E-mail", "Home e-mail")]
         kw = {v: (r.get(k) or "").strip() for k, v in KEEP.items()}
         kw["email_preferred"] = norm_email(kw["email_preferred"])

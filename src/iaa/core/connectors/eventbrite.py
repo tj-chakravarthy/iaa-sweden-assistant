@@ -38,7 +38,10 @@ def fetch_attendees(token: str, org_id: str, since: date) -> list[SourceRecord]:
     s.headers["Authorization"] = f"Bearer {token}"
     out: list[SourceRecord] = []
     events = _paged(
-        s, f"{API}/organizations/{org_id}/events/", "events", {"status": "ended,live", "order_by": "start_desc"}
+        s,
+        f"{API}/organizations/{org_id}/events/",
+        "events",
+        {"status": "ended,live,started,completed", "order_by": "start_desc"},
     )
     for ev in events:
         # local date, same as the Event start date column of an exported file
@@ -51,13 +54,19 @@ def fetch_attendees(token: str, org_id: str, since: date) -> list[SourceRecord]:
             out.append(
                 SourceRecord(
                     source=Source.EVENTBRITE,
-                    external_id=a.get("order_id", ""),
+                    external_id=a.get("id", ""),
                     emails=[norm_email(p.get("email"))] if p.get("email") else [],
                     name=p.get("name", ""),
                     date=start,
                     status=a.get("ticket_class_name", ""),
                     payload={
                         "event": ev["name"]["text"],
+                        "event_id": ev["id"],
+                        "attendee_id": a.get("id", ""),
+                        "barcode": next(
+                            (item.get("barcode", "") for item in a.get("barcodes", []) if item.get("barcode")), ""
+                        ),
+                        "order_id": a.get("order_id", ""),
                         "checked_in": a.get("checked_in"),
                         "cancelled": a.get("cancelled"),
                     },

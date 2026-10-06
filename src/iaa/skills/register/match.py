@@ -34,21 +34,23 @@ class Matcher:
         Aliases to IDs not in members are ignored.
         """
         self.by_id = {m.insead_id: m for m in members}
-        self.email_index: dict[str, str] = {}
+        if len(self.by_id) != len(members):
+            raise ValueError("duplicate member IDs")
+        self.email_index: dict[str, set[str]] = defaultdict(set)
         self.name_index: dict[str, set[str]] = defaultdict(set)
         self.name_alias: dict[str, str] = {}
         for m in members:
             for e in (m.email_preferred, m.email_insead, *m.aliases):
                 e = norm_email(e)
                 if e:
-                    self.email_index.setdefault(e, m.insead_id)
+                    self.email_index[e].add(m.insead_id)
             for k in name_keys(m.name):
                 self.name_index[k].add(m.insead_id)
         for alias, i in (aliases or {}).items():
             if i not in self.by_id:
                 continue
             if "@" in alias:
-                self.email_index.setdefault(norm_email(alias), i)
+                self.email_index[norm_email(alias)].add(i)
             elif norm_name(alias):
                 self.name_alias[norm_name(alias)] = i
         self._all_names = list(self.name_index)
@@ -56,10 +58,11 @@ class Matcher:
     def match(self, rec: SourceRecord) -> Match:
         if rec.external_id and rec.external_id in self.by_id and rec.source.value == "insead":
             return Match(insead_id=rec.external_id, method=MatchMethod.INSEAD_ID, confidence=1.0)
-        for e in rec.emails:
-            e = norm_email(e)
-            if e in self.email_index:
-                return Match(insead_id=self.email_index[e], method=MatchMethod.EMAIL, confidence=1.0)
+        ids = set().union(*(self.email_index.get(norm_email(email), set()) for email in rec.emails))
+        if len(ids) > 1:
+            return Match(insead_id=None, method=MatchMethod.AMBIGUOUS, confidence=0.5, candidates=sorted(ids))
+        if ids:
+            return Match(insead_id=next(iter(ids)), method=MatchMethod.EMAIL, confidence=1.0)
         return self.match_name(rec.name)
 
     def match_name(self, name: str) -> Match:

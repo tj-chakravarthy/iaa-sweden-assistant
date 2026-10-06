@@ -15,13 +15,24 @@ from ....core.tabular import read_rows
 
 def parse_payments_csv(raw: bytes) -> list[SourceRecord]:
     rows = read_rows(raw)
+    header = next((index for index, row in enumerate(rows) if row and row[0].strip() == "No."), None)
+    if header is None or [value.strip() for value in rows[header]][:5] != [
+        "No.",
+        "Date",
+        "Name",
+        "Amount Received (SEK)",
+        "End date",
+    ]:
+        raise ValueError("invalid payments columns")
     out: list[SourceRecord] = []
     channel = ""
-    for r in rows:
+    for r in rows[header + 1 :]:
         if len(r) > 1 and r[1].strip().endswith("Payments:"):
             channel = r[1].strip().replace(" Payments:", "")
             continue
         if r and r[0].strip().isdigit() and len(r) > 2 and r[2].strip():
+            if len(r) < 5 or not parse_date(r[1]) or (r[4].strip() and not parse_date(r[4])):
+                raise ValueError("invalid payment dates or row")
             out.append(
                 SourceRecord(
                     source=Source.PAYMENTS,
@@ -33,7 +44,6 @@ def parse_payments_csv(raw: bytes) -> list[SourceRecord]:
                         "amount": r[3].strip() if len(r) > 3 else "",
                         "end_date": iso_date(r[4]) if len(r) > 4 else "",
                         "updated_in_insead": r[5].strip() if len(r) > 5 else "",
-                        "comment": r[6].strip() if len(r) > 6 else "",
                     },
                 )
             )

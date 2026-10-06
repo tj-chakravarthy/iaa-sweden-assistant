@@ -19,12 +19,16 @@ def read_rows(raw: bytes) -> list[list[str]]:
         import openpyxl  # only needed for a workbook
 
         wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-        return [[_text(v) for v in row] for row in wb.worksheets[0].iter_rows(values_only=True)]
+        try:
+            return [[_text(v) for v in row] for row in wb.worksheets[0].iter_rows(values_only=True)]
+        finally:
+            wb.close()
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = raw.decode("cp1252", errors="replace")  # Excel's "CSV" on Windows
-    return list(csv.reader(io.StringIO(text)))
+    candidates = [list(csv.reader(io.StringIO(text), delimiter=delimiter)) for delimiter in (",", ";", "\t")]
+    return max(candidates, key=lambda rows: max((len(row) for row in rows), default=0))
 
 
 def _text(v: object) -> str:
