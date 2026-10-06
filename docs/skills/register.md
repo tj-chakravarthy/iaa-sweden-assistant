@@ -10,3 +10,22 @@
 | AI | None in the register itself. |
 | Personal data | Minimised on read. Never sent to a model before the migration. Never printed to a job log. |
 | Do-not-contact | A member marked this way is never suggested for a renewal reminder or a membership ask. |
+
+New-record proposals contain the complete minimised record in `new`. The
+export must still match that snapshot when approval is applied. Existing
+field changes require the current value to match `old`; conflicts stay open.
+
+All exported profile fields are reconciled. Exported and learned email
+aliases are merged with existing aliases. Matched payments propose payment
+years. Event records propose registration, check-in and no-show counts, and
+all segments are maintained through proposals. A no-show needs a past event,
+an unchecked ticket and evidence that check-in was used for that event.
+Counts cover the event records available in the inbox and API, rather than a
+fixed reporting window. Removing files can lower proposed counts.
+
+Mailchimp is read when both audience settings are supplied. A subscribed
+member with a positive click rate is engaged. Opens are not used. Reading
+Mailchimp never sends a message or changes a subscription.
+
+`lapsed-since-previous` means a status change since the start of the previous
+calendar month. Old rows without `status_changed` are reported as lapsed.

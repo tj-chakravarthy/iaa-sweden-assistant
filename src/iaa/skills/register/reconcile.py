@@ -18,14 +18,35 @@ from ...core.models import Proposal, Source, SourceRecord
 from ...core.normalize import parse_date
 from ...core.policy import assert_minimised
 from ...core.proposals import Proposer
+from .apply import value_text
 from .match import Matcher
 from .models import KIND, Match, MatchMethod, Member
+from .sources.eventbrite import attendee_key, event_key
 
 # Fields the INSEAD export decides. The rest belong to the register and are
 # carried over when a new export is the basis of a run.
-EXPORT_FIELDS = ("status", "member_expire", "tender_type", "company", "city", "country", "region", "email_preferred")
+EXPORT_FIELDS = (
+    "name",
+    "programme",
+    "promotion",
+    "naa",
+    "status",
+    "member_start",
+    "member_expire",
+    "tender_type",
+    "company",
+    "industry",
+    "function",
+    "city",
+    "country",
+    "region",
+    "email_preferred",
+    "email_insead",
+    "aliases",
+)
 REGISTER_OWNED = (
     "status_prev",
+    "status_changed",
     "paid_direct_years",
     "events_registered",
     "events_attended",
@@ -43,7 +64,7 @@ class ReconcileResult:
     aggregates: dict = field(default_factory=dict)
 
 
-def segment(m: Member, engaged: bool) -> str:
+def segment(m: Member, engaged: bool, as_of: Date | None = None) -> str:
     active = m.status == "Active"
     if active and engaged:
         return "paying-active"
@@ -51,7 +72,10 @@ def segment(m: Member, engaged: bool) -> str:
         return "paying-passive"
     if engaged:
         return "engaged-non-member"
-    if m.status_prev == "Active":
+    today = as_of or Date.today()
+    previous_month = Date(today.year - (today.month == 1), today.month - 1 if today.month > 1 else 12, 1)
+    changed = parse_date(m.status_changed)
+    if m.status_prev == "Active" and changed and previous_month <= changed <= today:
         return "lapsed-since-previous"
     if m.naa == "NON-MEMBER":
         return "never-member"
@@ -62,9 +86,13 @@ def _basis(current: list[Member], new_export: list[Member] | None) -> list[Membe
     """The members a run works from: the new export if there is one, keeping what
     only the register knows (aliases, do-not-contact, ...).
     """
-    if not new_export:
+    if new_export is None:
         return current
+    if not new_export:
+        raise ValueError("empty INSEAD export")
     by_id = {m.insead_id: m for m in current}
+    if len(by_id) != len(current):
+        raise ValueError("duplicate member IDs")
     out = []
     for n in new_export:
         c = by_id.get(n.insead_id)
@@ -96,13 +124,19 @@ def reconcile(
     known = keys already open, rejected or acknowledged.
     """
     as_of = as_of or Date.today()
+    unique_events = {attendee_key(record): record for record in records if record.source == Source.EVENTBRITE}
+    records = [record for record in records if record.source != Source.EVENTBRITE] + [
+        record for record in unique_events.values() if not record.payload.get("cancelled")
+    ]
     for r in records:
         assert_minimised(r.payload)
     propose = Proposer(run_id, KIND, known)
     by_id = {m.insead_id: m for m in current}
 
     # 1. INSEAD export: field changes, new records, records that are gone
-    if new_export:
+    if new_export is not None:
+        if not new_export or len({member.insead_id for member in new_export}) != len(new_export):
+            raise ValueError("empty export or duplicate INSEAD IDs")
         for n in new_export:
             c = by_id.get(n.insead_id)
             if c is None:
@@ -111,7 +145,7 @@ def reconcile(
                     subject=n.name,
                     field="*",
                     old="",
-                    new="new record",
+                    new=n.model_dump_json(),
                     reason="present in INSEAD export, not in register",
                     source="insead",
                     category="new-record",
@@ -120,6 +154,10 @@ def reconcile(
                 continue
             for f in EXPORT_FIELDS:
                 o, v = getattr(c, f), getattr(n, f)
+                if f == "aliases":
+                    v = sorted(set(o) | set(v))
+                    o = sorted(o)
+                o, v = value_text(o), value_text(v)
                 if o != v:
                     cat = (
                         "lapsed"
@@ -161,9 +199,43 @@ def reconcile(
     matcher = Matcher(base, aliases)
     matches = [(r, matcher.match(r)) for r in records]
     engaged: set[str] = set()
+    metrics = {
+        member.insead_id: {
+            "paid_direct_years": set(member.paid_direct_years),
+            "aliases": set(member.aliases),
+            "events_registered": 0,
+            "events_attended": 0,
+            "events_no_show": 0,
+        }
+        for member in base
+    }
+    attendance_events = {
+        event_key(record)
+        for record, _ in matches
+        if record.source == Source.EVENTBRITE and record.payload.get("checked_in") is True
+    }
     for r, mt in matches:
         if mt.insead_id and r.source in (Source.EVENTBRITE, Source.SIGNUP):
             engaged.add(mt.insead_id)
+        if mt.insead_id:
+            values = metrics[mt.insead_id]
+            member = base_by_id[mt.insead_id]
+            values["aliases"].update(
+                email for email in r.emails if email and email not in {member.email_preferred, member.email_insead}
+            )
+            if r.source == Source.PAYMENTS and r.date:
+                values["paid_direct_years"].add(r.date.year)
+            if r.source == Source.EVENTBRITE:
+                values["events_registered"] += 1
+                values["events_attended"] += r.payload.get("checked_in") is True
+                values["events_no_show"] += bool(
+                    r.date
+                    and r.date < as_of
+                    and event_key(r) in attendance_events
+                    and r.payload.get("checked_in") is False
+                )
+            if r.source == Source.MAILCHIMP and r.status == "subscribed" and (r.payload.get("avg_click_rate") or 0) > 0:
+                engaged.add(mt.insead_id)
         if r.source == Source.PAYMENTS:
             paid = f"{r.date} {r.payload.get('amount')} SEK via {r.status}"
             if mt.insead_id is None and mt.candidates:
@@ -240,6 +312,36 @@ def reconcile(
                 category="engaged-non-member",
                 suggested_action=NO_CONTACT if m.do_not_contact else "Membership ask",
             )
+        target_segment = segment(m, m.insead_id in engaged, as_of)
+        if target_segment != "engaged-non-member" and m.segment != target_segment:
+            propose(
+                subject_id=m.insead_id,
+                subject=m.name,
+                field="segment",
+                old=m.segment,
+                new=target_segment,
+                reason="current membership and engagement",
+                source="register",
+                category="segment-update",
+                suggested_action="Accept",
+            )
+        for name, value in metrics[m.insead_id].items():
+            if name.startswith("events_") and not unique_events:
+                continue
+            target = value_text(sorted(value) if isinstance(value, set) else value)
+            previous = value_text(getattr(m, name))
+            if previous != target:
+                propose(
+                    subject_id=m.insead_id,
+                    subject=m.name,
+                    field=name,
+                    old=previous,
+                    new=target,
+                    reason="matched source records",
+                    source="register",
+                    category="activity-update",
+                    suggested_action="Accept",
+                )
 
     # 4. aggregates for the brief. No personal data.
     agg = aggregates(base, matches, engaged, propose.proposals, as_of)
@@ -254,19 +356,20 @@ def aggregates(
     by_event: dict[str, Counter] = defaultdict(Counter)
     for r, mt in matches:
         if r.source == Source.EVENTBRITE:
-            ev = r.payload.get("event", "?")
+            identity, event_date = event_key(r)
+            ev = f"{r.payload.get('event', '?')} [{identity}; {event_date or 'undated'}]"
             by_event[ev]["registered"] += 1
             by_event[ev]["matched"] += mt.insead_id is not None
-            if r.payload.get("checked_in") is True:
-                by_event[ev]["attended"] += 1
+            if r.payload.get("checked_in") is not None:
+                by_event[ev]["attended"] += int(r.payload["checked_in"] is True)
     return {
         "records": len(members),
         "active": len(active),
         "active_iaa_swe": sum(m.naa == "IAA SWE" for m in active),
         "expiring_31_dec": sum(parse_date(m.member_expire) == year_end for m in active),
         "by_region_active": dict(Counter(m.region for m in active)),
-        "by_programme_active": dict(Counter(m.programme for m in active).most_common(6)),
-        "segments": dict(Counter(segment(m, m.insead_id in engaged) for m in members)),
+        "by_programme_active": dict(Counter(m.programme for m in active)),
+        "segments": dict(Counter(segment(m, m.insead_id in engaged, as_of) for m in members)),
         "match_methods": dict(Counter(mt.method.value for _, mt in matches)),
         "events": {k: dict(v) for k, v in by_event.items()},
         "proposals_by_category": dict(Counter(p.category for p in proposals)),

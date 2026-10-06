@@ -32,6 +32,7 @@ def book(monkeypatch, inbox, fake_book):
     monkeypatch.setenv("IAA_INBOX_FOLDER_ID", "folder")
     monkeypatch.setenv("IAA_LLM_PROVIDER", "none")
     monkeypatch.setenv("IAA_EVENTBRITE_TOKEN", "")
+    monkeypatch.setenv("IAA_MAILCHIMP_API_KEY", "")
     monkeypatch.setenv("IAA_ENVIRONMENT", "prod")
     sh.wb = Workbook(sh)
     sh.export = parse_insead_export(inbox["Download (3).csv"])
@@ -72,7 +73,8 @@ def test_first_month_to_third_month(book):
     assert "members" not in book.tabs
     cats = Counter(row[CATEGORY] for row in book.data("proposals"))
     assert cats["new-record"] == len(book.export) == 30
-    assert sum(cats.values()) == 35
+    assert sum(cats.values()) == 72
+    assert cats["activity-update"] == 8 and cats["segment-update"] == 29
     assert "1 x insead (new)" in out and "1 x payments (new)" in out and "1 x unknown (new)" in out
     assert sorted(row[2] for row in book.data("runs")) == ["eventbrite", "insead", "payments", "unknown"]
     assert any(name.startswith("brief_register_") and tab.cells for name, tab in book.tabs.items())
@@ -83,12 +85,12 @@ def test_first_month_to_third_month(book):
     # month 2: decisions carried out and logged. the same inbox raises nothing new
     out = run("run-all")
     assert_counts_only(out, book)
-    assert "applied 31, acknowledged 3, rejected 1" in out and "new proposals: 0" in out
+    assert "applied 68, acknowledged 3, rejected 1" in out and "new proposals: 0" in out
     assert "1 x insead (seen)" in out
     assert sorted(m.insead_id for m in members(book)) == sorted(m.insead_id for m in book.export)
     assert next(m for m in members(book) if m.insead_id == "900010").segment == "engaged-non-member"
     assert {m.insead_id: m.status for m in members(book)} == {m.insead_id: m.status for m in book.export}
-    assert Counter(row[OUTCOME] for row in book.data("changelog")) == {"applied": 31, "acknowledged": 3, "rejected": 1}
+    assert Counter(row[OUTCOME] for row in book.data("changelog")) == {"applied": 68, "acknowledged": 3, "rejected": 1}
     assert book.data("proposals") == []
 
     # month 3: nothing decided, nothing changes, nothing asked again
@@ -104,7 +106,7 @@ def test_first_month_to_third_month(book):
 def test_dry_run_writes_nothing_and_prints_counts_only(book):
     out = run("register", "reconcile", "--dry-run")
     assert book.tabs == {}  # not even an empty tab
-    assert "new proposals: 35" in out and "30 x new-record" in out and "1 x insead (new)" in out
+    assert "new proposals: 72" in out and "30 x new-record" in out and "1 x insead (new)" in out
     assert_counts_only(out, book)
 
 
@@ -118,11 +120,11 @@ def test_a_yes_without_the_export_waits_with_a_note(book):
     decide(book)
     del book.inbox["Download (3).csv"]  # the export was taken out of the inbox
     out = run("register", "apply")
-    assert "applied 0" in out and "31 approved but not applicable" in out
+    assert "applied 0" in out and "68 approved but not applicable" in out
     assert "members" not in book.tabs
     notes = Counter(p.note for p in book.wb.proposals())
     assert notes["not applied: the record is not in the INSEAD export in the inbox"] == 30
-    assert notes["not applied: no member with this INSEAD ID"] == 1  # the segment of a record not yet loaded
+    assert notes["not applied: no member with this INSEAD ID"] == 38
 
 
 def test_apply_stops_if_someone_is_deciding_during_the_run(book, monkeypatch):
@@ -174,7 +176,7 @@ def test_a_second_skill_needs_no_change_outside_itself(book, monkeypatch):
 
     run("run-all")
     kinds = Counter(row[PROPOSAL_COLS.index("kind")] for row in book.data("proposals"))
-    assert kinds == {"register-change": 35, "event-listing": 1}
+    assert kinds == {"register-change": 72, "event-listing": 1}
     decide(book)
     cli.apply_decisions(cli._open(), [events])  # iaa events apply: only its own kind
     assert done == ["Synthetic Masterclass", "committed"]

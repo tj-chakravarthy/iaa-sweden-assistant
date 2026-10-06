@@ -27,6 +27,7 @@ FIXTURES = Path(__file__).resolve().parents[4] / "tests" / "fixtures"
 class _Sources:
     export: list[Member] | None = None  # the newest INSEAD export in the inbox, if any
     records: list[SourceRecord] = field(default_factory=list)
+    export_error: bool = False
 
 
 def _sources(run: Run) -> _Sources:
@@ -36,34 +37,53 @@ def _sources(run: Run) -> _Sources:
     return run.memo["register"]
 
 
-def _read_sources(run: Run) -> _Sources:
-    from ...core.connectors import eventbrite
+def _read_sources(run: Run, include_records: bool = True) -> _Sources:
+    from ...core.connectors import eventbrite, mailchimp
 
     box = _Sources()
     from_files: list[SourceRecord] = []
+    unknown_download = False
     for f in run.inbox:  # oldest first, so the newest INSEAD export wins
+        if f.state == "unreadable":
+            unknown_download = True
+            continue
+        if f.state == "unsupported":
+            continue
         kind = sources.classify(f.raw)
+        if kind == "insead":
+            box.export = None
+            box.export_error = True
         try:
             if kind == "insead":
                 box.export = sources.parse_insead_export(f.raw)
-            elif kind == "payments":
+                box.export_error = False
+            elif kind == "payments" and include_records:
                 box.records += sources.parse_payments_csv(f.raw)
-            elif kind == "eventbrite":
+            elif kind == "eventbrite" and include_records:
                 from_files += sources.parse_attendees_csv(f.raw)
         except Exception:  # an unreadable file must not stop the run. It shows in runs and in the counts.
             kind += "-unreadable"
         if kind != "unknown":
             f.kind = kind
+        elif f.raw.startswith(b"PK") or f.name.lower().endswith((".csv", ".xlsx")):
+            unknown_download = True
+    if unknown_download:
+        box.export, box.export_error = None, True
     from_api: list[SourceRecord] = []
     s = run.settings
-    if s.eventbrite_token and s.eventbrite_org_id:
+    if include_records and s.eventbrite_token and s.eventbrite_org_id:
         from_api = eventbrite.fetch_attendees(s.eventbrite_token, s.eventbrite_org_id, date(run.today.year - 1, 1, 1))
     box.records += sources.drop_file_duplicates(from_files, from_api) + from_api
+    if include_records and s.mailchimp_api_key and s.mailchimp_list_id:
+        box.records += mailchimp.fetch_audience(s.mailchimp_api_key, s.mailchimp_list_id)
     return box
 
 
 def _members(run: Run) -> list[Member]:
-    return [m for m in run.book.read("members", Member) if m.insead_id.strip()]
+    members = run.book.read("members", Member)
+    if len({member.insead_id for member in members}) != len(members):
+        raise ValueError("duplicate member IDs")
+    return members
 
 
 def _aliases(run: Run) -> dict[str, str]:
@@ -83,17 +103,40 @@ def propose(run: Run) -> tuple[list[Proposal], str]:
         llm = run.llm
     except Exception:
         llm = None
-    return res.proposals, render(run.today, res.aggregates, llm)
+    brief = render(run.today, res.aggregates, llm)
+    if box.export_error:
+        brief += "\nINSEAD source unavailable: export changes are suspended.\n"
+    return res.proposals, brief
+
+
+def refresh(run: Run, proposals: list[Proposal]) -> list[Proposal]:
+    from .reconcile import NO_CONTACT
+
+    protected = {member.insead_id for member in _members(run) if member.do_not_contact}
+    return [
+        proposal.model_copy(update={"suggested_action": NO_CONTACT})
+        if proposal.kind == KIND
+        and proposal.subject_id in protected
+        and proposal.suggested_action in {"Renewal reminder", "Membership ask"}
+        else proposal
+        for proposal in proposals
+    ]
 
 
 class _Applier:
     def __init__(self, run: Run):
         self.book = run.book
+        self.run = run
         self.by_id = {m.insead_id: m for m in _members(run)}
-        self.export_by_id = {m.insead_id: m for m in (_sources(run).export or [])}
+        self.export_by_id = None
 
     def carry_out(self, p: Proposal) -> tuple[str, str]:
-        return carry_out(p, self.by_id, self.export_by_id)
+        if p.category == "new-record" and self.export_by_id is None:
+            box = _read_sources(self.run, include_records=False)
+            if box.export_error:
+                return "", "the latest export is unavailable or invalid"
+            self.export_by_id = {member.insead_id: member for member in (box.export or [])}
+        return carry_out(p, self.by_id, self.export_by_id or {}, self.run.today)
 
     def commit(self) -> None:
         """The only write to the members tab."""
@@ -117,7 +160,7 @@ def selftest() -> tuple[bool, list[str]]:
     members, left, _ = decide_all([], first.proposals)
     res = reconcile("selftest-2", members, export, recs, {}, as_of=today)
     lines = [render(today, res.aggregates)]
-    lines.append(f"{len(first.proposals)} records loaded on approval, then {len(res.proposals)} proposals")
+    lines.append(f"{len(export)} records loaded on approval, then {len(res.proposals)} proposals")
     members, left2, settled = decide_all(members, res.proposals)
     known = settled | {key_of(p) for p in left + left2}
     again = reconcile("selftest-3", members, export, recs, {}, known, as_of=today)
@@ -133,4 +176,5 @@ SKILL = Skill(
     propose=propose,
     applier=_Applier,
     selftest=selftest,
+    refresh=refresh,
 )

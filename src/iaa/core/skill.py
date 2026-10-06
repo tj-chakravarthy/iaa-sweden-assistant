@@ -58,7 +58,18 @@ class Run:
         seen = {str(r.get("md5")) for r in self.book.rows("runs")}
         files = []
         for f in drive.list_inbox(self.settings.inbox_folder_id):
-            raw = drive.download(f["id"], f["mimeType"])
+            mime = f["mimeType"]
+            unsupported = (
+                mime.startswith("application/vnd.google-apps.") and mime != "application/vnd.google-apps.spreadsheet"
+            )
+            if unsupported:
+                files.append(InboxFile(f["name"], b"", "", f.get("modifiedTime", ""), "unsupported"))
+                continue
+            try:
+                raw = drive.download(f["id"], mime)
+            except Exception:
+                files.append(InboxFile(f["name"], b"", "", f.get("modifiedTime", ""), "unreadable"))
+                continue
             md5 = f.get("md5Checksum") or hashlib.md5(raw).hexdigest()
             state = "seen" if md5 in seen else "new"
             files.append(InboxFile(f["name"], raw, md5, f.get("modifiedTime", ""), state))
@@ -95,3 +106,4 @@ class Skill:
     applier: Callable[[Run], Applier]
     # run on synthetic fixtures, no network: (passed, lines to print)
     selftest: Callable[[], tuple[bool, list[str]]]
+    refresh: Callable[[Run, list[Proposal]], list[Proposal]] = lambda run, proposals: proposals

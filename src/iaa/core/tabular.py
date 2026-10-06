@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import io
+from collections import Counter
 from datetime import date, datetime
 
 XLSX_MAGIC = b"PK"  # an .xlsx file is a zip archive
@@ -28,7 +29,12 @@ def read_rows(raw: bytes) -> list[list[str]]:
     except UnicodeDecodeError:
         text = raw.decode("cp1252", errors="replace")  # Excel's "CSV" on Windows
     candidates = [list(csv.reader(io.StringIO(text), delimiter=delimiter)) for delimiter in (",", ";", "\t")]
-    return max(candidates, key=lambda rows: max((len(row) for row in rows), default=0))
+
+    def consistency(rows):
+        widths = Counter(len(row) for row in rows if len(row) > 1)
+        return max(((count, width) for width, count in widths.items()), default=(0, 0))
+
+    return max(candidates, key=consistency)
 
 
 def _text(v: object) -> str:

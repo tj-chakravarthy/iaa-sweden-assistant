@@ -70,28 +70,44 @@ def test_new_export_diff():
 def test_member_missing_from_export_is_raised():
     ms, _ = load()
     res = reconcile("t", ms, ms[1:], [], {}, as_of=AS_OF)
-    assert [(p.category, p.subject_id) for p in res.proposals] == [("not-in-export", ms[0].insead_id)]
+    assert [(p.category, p.subject_id) for p in res.proposals if p.source == "insead"] == [
+        ("not-in-export", ms[0].insead_id)
+    ]
 
 
 def test_payment_mismatch_compares_dates_not_just_status():
     ms, _ = load()
     lapsed_2025 = next(m for m in ms if m.status == "Inactive" and m.member_expire == "2025-12-31")
     # paid for 2025, INSEAD ran to end of 2025, inactive today: fine
-    assert reconcile("t", ms, None, [payment(lapsed_2025.name)], {}, as_of=AS_OF).proposals == []
+    assert not [
+        proposal
+        for proposal in reconcile("t", ms, None, [payment(lapsed_2025.name)], {}, as_of=AS_OF).proposals
+        if proposal.field == "payment"
+    ]
     # paid for 2026, INSEAD ends 2025: INSEAD is behind
     res = reconcile("t", ms, None, [payment(lapsed_2025.name, "2026-02-10", "2026-12-31")], {}, as_of=AS_OF)
-    (p,) = res.proposals
+    (p,) = [proposal for proposal in res.proposals if proposal.field == "payment"]
     assert p.category == "payment-status-mismatch"
     assert p.field == "payment"  # informational: approving it must not change the member's status
 
 
 def test_payment_with_a_near_miss_name_is_not_linked():
     ms = [Member(insead_id="1", name="Anna Lindqvist", status="Inactive", member_expire="2015-12-31")]
-    (p,) = reconcile("t", ms, None, [payment("Hanna Lindqvist")], {}, as_of=AS_OF).proposals
+    (p,) = [
+        proposal
+        for proposal in reconcile("t", ms, None, [payment("Hanna Lindqvist")], {}, as_of=AS_OF).proposals
+        if proposal.field == "payment"
+    ]
     assert (p.category, p.subject_id) == ("payment-unconfirmed-match", "")
     assert "['1']" in p.reason
     # the owner adds the name to aliases, then it is that member's payment
-    (p,) = reconcile("t", ms, None, [payment("Hanna Lindqvist")], {"hanna lindqvist": "1"}, as_of=AS_OF).proposals
+    (p,) = [
+        proposal
+        for proposal in reconcile(
+            "t", ms, None, [payment("Hanna Lindqvist")], {"hanna lindqvist": "1"}, as_of=AS_OF
+        ).proposals
+        if proposal.field == "payment"
+    ]
     assert (p.category, p.subject_id) == ("payment-status-mismatch", "1")
 
 

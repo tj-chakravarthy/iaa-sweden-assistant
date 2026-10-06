@@ -47,10 +47,17 @@ def apply_decisions(run: Run, skills: Sequence[Skill]) -> None:
     """Carry out decided proposals of these skills, log them, take them off the tab."""
     book = run.book
     snapshot = book.proposals()
-    decided = {p.kind for p in snapshot if policy.approved(p) or policy.rejected(p)}
+    refreshed = snapshot
+    for skill in skills:
+        refreshed = skill.refresh(run, refreshed)
+    decided = {p.kind for p in refreshed if policy.approved(p)}
     appliers = {s.name: s.applier(run) for s in skills if s.kinds & decided}
-    handlers = {kind: appliers[s.name].carry_out for s in skills if s.name in appliers for kind in s.kinds}
-    remaining, log = decide(snapshot, handlers)
+    handlers = {
+        kind: appliers[s.name].carry_out if s.name in appliers else lambda proposal: ("", "no approved decisions")
+        for s in skills
+        for kind in s.kinds
+    }
+    remaining, log = decide(refreshed, handlers)
     outcomes = Counter(row[OUTCOME] for row in log)
     blocked = sum(bool(p.note) and policy.approved(p) for p in remaining)
     if log or remaining != snapshot:
@@ -73,6 +80,11 @@ def apply_decisions(run: Run, skills: Sequence[Skill]) -> None:
 def raise_proposals(run: Run, skills: Sequence[Skill], details: bool = False) -> None:
     """Each skill reads its sources. Add its proposals to the tab and write its brief."""
     for s in skills:
+        if not run.dry_run:
+            existing = run.book.proposals()
+            refreshed = s.refresh(run, existing)
+            if refreshed != existing:
+                run.book.write_proposals(refreshed)
         proposals, brief = s.propose(run)
         if stray := {p.kind for p in proposals} - s.kinds:
             raise ValueError(f"skill {s.name} raised proposals of kinds it does not own: {sorted(stray)}")

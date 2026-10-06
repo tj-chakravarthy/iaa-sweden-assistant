@@ -40,7 +40,9 @@ def test_undecided_proposals_are_left_alone():
 def test_new_records_are_added_from_the_export():
     export, _ = load()
     first = reconcile("t", [], export, [], {}, as_of=AS_OF)
-    members, remaining, log = apply([], yes(first.proposals), export)
+    members, remaining, log = apply(
+        [], yes([proposal for proposal in first.proposals if proposal.category == "new-record"]), export
+    )
     assert len(members) == len(export) == len(log)
     assert remaining == []
     assert {row[OUTCOME] for row in log} == {"applied"}
@@ -49,7 +51,9 @@ def test_new_records_are_added_from_the_export():
 def test_new_record_without_its_export_stays_open_and_is_not_logged():
     export, _ = load()
     first = reconcile("t", [], export, [], {}, as_of=AS_OF)
-    members, remaining, log = apply([], yes(first.proposals))
+    members, remaining, log = apply(
+        [], yes([proposal for proposal in first.proposals if proposal.category == "new-record"])
+    )
     assert (members, log) == ([], [])
     assert len(remaining) == len(export)
     assert all(p.approve == "yes" and p.note.startswith("not applied") for p in remaining)

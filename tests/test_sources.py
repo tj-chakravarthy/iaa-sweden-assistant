@@ -66,7 +66,7 @@ def test_xlsx_export_parses_like_the_csv():
     assert from_csv[0].member_expire == "2026-12-31"
     # switching format raises no proposals and the renewal count holds
     res = reconcile("t", from_csv, from_xlsx, [], {}, as_of=AS_OF)
-    assert res.proposals == []
+    assert not [proposal for proposal in res.proposals if proposal.source == "insead"]
     assert res.aggregates["expiring_31_dec"] == 10
 
 

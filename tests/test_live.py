@@ -67,6 +67,7 @@ def book(sheet, monkeypatch, inbox):
         "IAA_INBOX_FOLDER_ID": "the-in-memory-inbox",
         "IAA_LLM_PROVIDER": "none",
         "IAA_EVENTBRITE_TOKEN": "",
+        "IAA_MAILCHIMP_API_KEY": "",
         "IAA_ENVIRONMENT": "prod",
     }.items():
         monkeypatch.setenv(name, value)
@@ -104,7 +105,7 @@ def test_three_months_on_a_real_sheet(book):
     out = run("run-all")
     assert_counts_only(out, book)
     proposals = book.proposals()
-    assert Counter(p.category for p in proposals)["new-record"] == 30 and len(proposals) == 35
+    assert Counter(p.category for p in proposals)["new-record"] == 30 and len(proposals) == 72
     assert "members" not in tab_names(book)
     assert sorted(r["kind"] for r in book.rows("runs")) == ["eventbrite", "insead", "payments", "unknown"]
 
@@ -115,11 +116,18 @@ def test_three_months_on_a_real_sheet(book):
     # month 2: carried out and logged. the same inbox raises nothing new
     out = run("run-all")
     assert_counts_only(out, book)
-    assert "applied 31, acknowledged 3, rejected 1" in out and "new proposals: 0" in out
-    expected = {m.insead_id: m.model_dump() for m in book.export}
-    expected["900010"]["segment"] = "engaged-non-member"
+    assert "applied 68, acknowledged 3, rejected 1" in out and "new proposals: 0" in out
+    from iaa.skills.register.apply import apply
+
+    expected_members, remaining, _ = apply(
+        [],
+        [proposal.model_copy(update={"approve": answers[index][0]}) for index, proposal in enumerate(proposals)],
+        book.export,
+    )
+    assert not remaining
+    expected = {member.insead_id: member.model_dump() for member in expected_members}
     assert {m.insead_id: m.model_dump() for m in book.read("members", Member)} == expected
-    assert Counter(r["outcome"] for r in book.rows("changelog")) == {"applied": 31, "acknowledged": 3, "rejected": 1}
+    assert Counter(r["outcome"] for r in book.rows("changelog")) == {"applied": 68, "acknowledged": 3, "rejected": 1}
     assert set(book.rows("changelog")[0]) == set(CHANGELOG_COLS)
     assert book.proposals() == []
 
@@ -127,7 +135,7 @@ def test_three_months_on_a_real_sheet(book):
     out = run("run-all")
     assert "applied 0, acknowledged 0, rejected 0" in out and "new proposals: 0" in out
     assert {m.insead_id: m.model_dump() for m in book.read("members", Member)} == expected
-    assert len(book.rows("changelog")) == 35
+    assert len(book.rows("changelog")) == 72
 
 
 def test_values_come_back_as_they_were_written(book):
@@ -157,7 +165,7 @@ def test_what_a_person_types_is_understood(book):
     row = dict.fromkeys(PROPOSAL_COLS, "")
     # typed by hand: the ID becomes a number, the date a date, and "YES" counts as yes
     row |= dict(run_id="by hand", kind="register-change", subject_id=900003, subject=book.export[3].name)
-    row |= dict(field="member_expire", new="2027-12-31", approve="YES")
+    row |= dict(field="member_expire", old=book.export[3].member_expire, new="2027-12-31", approve="YES")
     typed(book, "proposals", "A2", [[row[c] for c in PROPOSAL_COLS]])
     book.sh.add_worksheet("aliases", rows=10, cols=2)  # the owner makes this tab by hand
     typed(book, "aliases", "A1", [["alias", "insead_id"], ["Hanna Lindqvist", 900003]])
@@ -182,7 +190,7 @@ def test_rows_are_added_below_a_gap(book):
 def test_a_dry_run_leaves_no_trace(book):
     before = tab_names(book)
     out = run("register", "reconcile", "--dry-run")
-    assert "new proposals: 35" in out and "dry run, nothing written" in out
+    assert "new proposals: 72" in out and "dry run, nothing written" in out
     assert_counts_only(out, book)
     assert tab_names(book) == before
 

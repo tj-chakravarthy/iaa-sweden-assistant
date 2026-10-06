@@ -16,6 +16,7 @@ acknowledged is not raised again (known_keys).
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
@@ -36,7 +37,7 @@ Handler = Callable[[Proposal], tuple[str, str]]
 
 def proposal_key(kind: str, subject_id: str, subject: str, field: str, old: str, new: str) -> str:
     who = subject_id.strip() or f"~{norm_name(subject)}"
-    return "|".join((kind, who, field, old, new))
+    return json.dumps((kind, who, field, old, new), ensure_ascii=False)
 
 
 def key_of(p: Proposal) -> str:
