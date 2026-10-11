@@ -213,6 +213,13 @@ def test_a_slash_date_is_read_month_first_only_from_insead():
     stream = io.StringIO()
     csv.writer(stream).writerows(rows)
     assert parse_insead_export(stream.getvalue().encode())[0].member_expire == "2026-05-01"
+    # a 31st in the month's place shows the file is day first, so no date in it can be trusted
+    rows[5][rows[3].index("Start Date Membership")] = "31/12/2020"
+    stream = io.StringIO()
+    csv.writer(stream).writerows(rows)
+    with pytest.raises(ValueError, match="day first"):
+        parse_insead_export(stream.getvalue().encode())
+    assert classify(stream.getvalue().encode()) == "insead"  # still the export, so it suspends export changes
 
     rows = read_rows((FX / "payments.csv").read_bytes())
     paid = next(index for index, row in enumerate(rows) if row[0].strip() == "1")

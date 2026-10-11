@@ -8,12 +8,16 @@ Quirks (October 2026 export):
 - Postal/city come as Home and Preferred. Home is the better region signal.
 - Surnames may be transliterated (Sjöberg -> Sjoeberg).
 - Dates are month first, 12/31/2026, in the CSV and date cells in the XLSX.
-  Both are stored as 2026-12-31.
+  Both are stored as 2026-12-31. A file with a date like 31/12/2026 is day
+  first, for example a Google Sheet shown in another locale. It is refused,
+  since 05/01/2026 in it would be read as 1 May.
 - A person in two associations has one row per association. One is kept, the
   IAA SWE row if there is one.
 """
 
 from __future__ import annotations
+
+import re
 
 import pandas as pd
 
@@ -99,8 +103,11 @@ def parse_insead_export(raw: bytes) -> list[Member]:
         kw = {v: (r.get(k) or "").strip() for k, v in KEEP.items()}
         kw["email_preferred"] = norm_email(kw["email_preferred"])
         kw["email_insead"] = norm_email(kw["email_insead"])
-        kw["member_start"] = iso_date(kw["member_start"], month_first=True)
-        kw["member_expire"] = iso_date(kw["member_expire"], month_first=True)
+        for column in ("member_start", "member_expire"):
+            written = re.fullmatch(r"(\d{1,2})/\d{1,2}/\d{4}", kw[column])
+            if written and int(written[1]) > 12:
+                raise ValueError("the INSEAD export writes the day first; its dates would be misread")
+            kw[column] = iso_date(kw[column], month_first=True)
         members.append(
             Member(
                 name=name,

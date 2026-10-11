@@ -280,6 +280,15 @@ def test_a_no_on_a_lapse_stands_through_an_export_that_leaves_the_member_out(boo
     assert not rows_of(book, "lapsed") and not rows_of(book, "not-in-export") and not outcomes(book, "reopened")
 
 
+def test_an_export_that_writes_the_day_first_is_not_used(book):
+    loaded(book)
+    edit_export(book, "Expire Date Membership", "31/12/2027")  # the sheet was shown in another locale
+    out = run("register", "reconcile")
+    assert "1 x insead-unreadable" in out and "new proposals: 0" in out
+    assert "INSEAD source unavailable" in brief(book)
+    assert first_member(book).member_expire == "2026-12-31" and not book.data("proposals")
+
+
 def test_a_changed_record_replaces_its_undecided_row(book):
     subject_id, new = PROPOSAL_COLS.index("subject_id"), PROPOSAL_COLS.index("new")
     run("register", "reconcile")

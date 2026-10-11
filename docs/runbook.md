@@ -116,6 +116,11 @@ Replace it or remove it. Once a valid export is newer than the bad file, the
 export is used again. CSVs may use commas, semicolons or tabs; XLSX data
 must be on the first worksheet.
 
+INSEAD writes dates month first (`12/31/2026`). An export kept as a Google
+Sheet is read as the sheet shows it. If it shows the day first
+(`31/12/2026`), the export is reported as `unreadable` and not used: format
+the two membership date columns as `2026-12-31` in the sheet.
+
 A person in two associations has two rows with the same ID. One record is
 kept, from the IAA SWE row if there is one. Rows for one ID that disagree on
 anything else make the export invalid, unless exactly one is the IAA SWE row.
