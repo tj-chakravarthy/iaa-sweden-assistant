@@ -40,6 +40,9 @@ inbox (Drive), Eventbrite, Mailchimp
 - Matching order: INSEAD ID, email, alias, name. A near-match is only shown
   as a candidate.
 - A proposal is not raised twice.
+- Applied decisions, member updates and their audit entries commit together.
+  Write runs lock the workbook temporarily; see the runbook for owner access
+  and interrupted-run recovery.
 - Monthly run plus a daily dry run. Both are manual until the dev register
   test passes.
 
@@ -86,6 +89,8 @@ Try it on a dev register first: [docs/dev-register.md](docs/dev-register.md).
    `IAA_MAILCHIMP_API_KEY`, `IAA_GEMINI_API_KEY`.
    Variables: `IAA_REGISTER_SHEET_ID`, `IAA_INBOX_FOLDER_ID`,
    `IAA_EVENTBRITE_ORG_ID`, `IAA_MAILCHIMP_LIST_ID`, `IAA_LLM_PROVIDER`.
+   Optional model selection: `IAA_LLM_MODEL`. For the association's Vertex
+   backend, see [migration.md](docs/migration.md).
 4. GitHub environment `prod-check`, no reviewer, for the daily check.
    Secret: `GOOGLE_SA_JSON` (second account).
    Variables: `IAA_REGISTER_SHEET_ID`, `IAA_INBOX_FOLDER_ID`.

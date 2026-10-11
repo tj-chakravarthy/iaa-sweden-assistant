@@ -78,6 +78,17 @@ If there are several INSEAD exports in the inbox, the most recently modified
 one is used. An export filtered to active members would make every other
 member look as if they had left INSEAD, so drop the unfiltered one.
 
+The newest export must have the required columns, unique IDs and complete
+rows. An empty or invalid export suspends export changes rather than selecting
+an older file. An undownloadable file or an unrecognised table also suspends
+export changes because it might be the latest export. Unsupported Drive
+documents and folders are counted and skipped. CSVs may use commas, semicolons
+or tabs; XLSX data must be on the first worksheet.
+
+An existing workbook gains the `status_changed` column on the next approved
+member write. Existing dates and list cells remain readable. Do not rearrange
+the proposals or changelog headers; a mismatched append is refused.
+
 ## If a run fails
 
 - The job log names the step and the kind of error but not its message,
