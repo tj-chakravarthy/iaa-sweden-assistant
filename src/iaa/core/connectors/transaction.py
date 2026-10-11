@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 LOCK_TAB = "_iaa_write_lock"
 
 
+class Changed(RuntimeError):
+    """Someone edited the workbook while a run held it. The run writes nothing."""
+
+
 def cells_request(sheet_id: int, rows: list[list[Any]]) -> dict:
     def cell(value):
         if value is None or value == "":
@@ -95,7 +99,7 @@ class Transaction:
             return self.original[name]  # commit checks it is still what the tab holds
         values = self.book._raw_values(name)
         if name not in self.sheets and values:
-            raise RuntimeError("a tab was added during the run; no data was written")
+            raise Changed("a tab was added during the run; no data was written")
         self.original.setdefault(name, values)
         return values
 
@@ -110,7 +114,7 @@ class Transaction:
         if not self.staged:
             return
         if any(self.book._raw_values(name) != original for name, original in self.original.items()):
-            raise RuntimeError("the workbook changed during the run; no data was written")
+            raise Changed("the workbook changed during the run; no data was written")
         requests = []
         for name, rows in self.staged.items():
             properties = self.sheets.get(name)

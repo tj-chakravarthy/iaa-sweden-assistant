@@ -82,7 +82,7 @@ class Run:
         return client(self.settings)
 
     def known(self) -> set[str]:
-        """Keys of proposals not to raise again. Read fresh on each call."""
+        """Keys of proposals not to raise again."""
         return known_keys(self.book.proposals(), self.book.rows("changelog"))
 
 

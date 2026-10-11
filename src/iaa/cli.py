@@ -17,7 +17,7 @@ from __future__ import annotations
 import traceback
 from collections import Counter
 from collections.abc import Sequence
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import typer
@@ -45,9 +45,23 @@ def _open(dry_run: bool = False) -> Run:
     return Run(Workbook.open(s.register_sheet_id, read_only=dry_run), s, dry_run)
 
 
+@contextmanager
+def _writing(run: Run):
+    """One locked, all-or-nothing write to the workbook."""
+    from .core.connectors.transaction import Changed
+
+    try:
+        with run.book.transaction():
+            yield
+    except Changed:
+        # someone is editing the workbook right now. The sentence holds no data, so it may be logged.
+        typer.echo("the workbook was edited during the run; nothing was written. Run again.", err=True)
+        raise typer.Exit(1) from None
+
+
 def apply_decisions(run: Run, skills: Sequence[Skill]) -> None:
     """Carry out decided proposals of these skills, log them, take them off the tab."""
-    with run.book.transaction():
+    with _writing(run):
         result = _apply_decisions(run, skills)
     typer.echo(result)
 
@@ -69,10 +83,6 @@ def _apply_decisions(run: Run, skills: Sequence[Skill]) -> str:
     outcomes = Counter(row[OUTCOME] for row in log)
     blocked = sum(bool(p.note) and policy.approved(p) for p in remaining)
     if log or remaining != snapshot:
-        if book.proposals() != snapshot:
-            # someone is editing the tab right now: write nothing
-            typer.echo("the proposals tab was edited during the run; nothing was written. Run again.", err=True)
-            raise typer.Exit(1)
         applied = {row[KIND] for row in log if row[OUTCOME] == "applied"}
         for s in skills:
             if s.kinds & applied:
@@ -89,7 +99,7 @@ def _apply_decisions(run: Run, skills: Sequence[Skill]) -> str:
 
 def raise_proposals(run: Run, skills: Sequence[Skill], details: bool = False) -> None:
     """Each skill reads its sources. Add its proposals to the tab and write its brief."""
-    with nullcontext() if run.dry_run else run.book.transaction():
+    with nullcontext() if run.dry_run else _writing(run):
         _raise_proposals(run, skills, details)
 
 

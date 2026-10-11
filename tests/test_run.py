@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from iaa import cli
 from iaa.core.config import settings
 from iaa.core.connectors.sheets import PROPOSAL_COLS, Workbook
+from iaa.core.connectors.transaction import LOCK_TAB
 from iaa.core.models import Proposal
 from iaa.core.proposals import CHANGELOG_COLS, key_of
 from iaa.core.skill import Run, Skill
@@ -361,20 +362,18 @@ def test_a_yes_without_the_export_waits_with_a_note(book):
 def test_apply_stops_if_someone_is_deciding_during_the_run(book, monkeypatch):
     run("register", "reconcile")
     decide(book)
-    read, calls = Workbook.proposals, []
+    write = Workbook.write_proposals
 
-    def proposals(self):
-        rows = read(self)
-        calls.append(1)
-        if len(calls) == 2:  # a decision changes between the first read and the write
-            rows[0] = rows[0].model_copy(update={"approve": "no"})
-        return rows
+    def edited_meanwhile(self, proposals):
+        book.tabs["proposals"].cells[1][APPROVE] = "no"  # a decision changes between the read and the write
+        write(self, proposals)
 
-    monkeypatch.setattr(Workbook, "proposals", proposals)
+    monkeypatch.setattr(Workbook, "write_proposals", edited_meanwhile)
     result = CliRunner().invoke(cli.app, ["register", "apply"])
     assert result.exit_code == 1
-    assert "nothing was written" in result.output
-    assert "members" not in book.tabs and "changelog" not in book.tabs
+    assert "the workbook was edited during the run; nothing was written" in result.output
+    assert "members" not in book.tabs and "changelog" not in book.tabs and LOCK_TAB not in book.tabs
+    assert len(book.data("proposals")) == 36 and book.data("proposals")[0][APPROVE] == "no"
 
 
 def test_a_second_skill_needs_no_change_outside_itself(book, monkeypatch):
