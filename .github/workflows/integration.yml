@@ -2,12 +2,12 @@ name: integration
 # Runs tests/test_live.py on a dev spreadsheet. See docs/dev-register.md.
 # Environment "dev": a service account that can edit only the dev sheet.
 # The test deletes and rebuilds tabs there and refuses a sheet without "dev" in its title.
-# Synthetic data only. Without the secret the tests are skipped.
+# Synthetic data only. Missing configuration or skipped required tests fail this job.
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["src/**", "tests/**", "pyproject.toml", "uv.lock"]
+    paths: ["src/**", "tests/**", "pyproject.toml", "uv.lock", ".github/workflows/integration.yml"]
 permissions:
   contents: read
 concurrency: integration # one run at a time on the dev sheet
@@ -25,4 +25,4 @@ jobs:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           IAA_DEV_SHEET_ID: ${{ vars.IAA_DEV_SHEET_ID }}
           IAA_DEV_INBOX_FOLDER_ID: ${{ vars.IAA_DEV_INBOX_FOLDER_ID }}
-        run: uv run pytest tests/test_live.py -q -rs
+        run: uv run pytest tests/test_live.py --require-live -q -rs

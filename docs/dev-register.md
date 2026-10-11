@@ -32,7 +32,7 @@ Nothing real goes in it. No export, no payments sheet, no member.
 ## Run the live test
 
 ```
-uv run pytest tests/test_live.py -rs
+uv run pytest tests/test_live.py --require-live -rs
 ```
 
 It can take a few minutes. Google limits requests per minute and the connector
@@ -48,8 +48,15 @@ synthetic fixtures:
 | dry run | a dry run creates no tab and changes nothing |
 | inbox folder | the three kinds of file in the dev folder are downloaded and recognised |
 
-Without the two settings the tests are skipped. That is what happens in CI on
-a pull request.
+Without `--require-live`, missing settings skip the tests, including in ordinary
+pull-request CI. With `--require-live`, missing configuration fails immediately,
+and all five required spreadsheet checks must actually pass. Skipped or
+unselected checks cannot make the dedicated integration job green. The inbox
+check remains optional when its folder setting is absent.
+
+The command tests atomic updates and temporary protections on the dev sheet.
+After a killed run, follow the write-lock recovery steps in the runbook before
+retrying. Do not run the destructive live tests while another writer is active.
 
 ## Try the commands by hand
 
