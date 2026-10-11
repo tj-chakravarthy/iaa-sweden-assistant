@@ -128,6 +128,19 @@ def test_all_programmes_are_reported():
     assert sum(result.aggregates["by_programme_active"].values()) == 8
 
 
+def test_renamed_event_has_one_aggregate():
+    record = SourceRecord(
+        source=Source.EVENTBRITE,
+        name="Synthetic Person",
+        date=date(2026, 10, 1),
+        payload={"event_id": "1", "event": "Original title", "attendee_id": "1"},
+    )
+    renamed = record.model_copy(update={"payload": record.payload | {"event": "New title", "attendee_id": "2"}})
+    result = reconcile("test", [], None, [record, renamed], {}, as_of=TODAY)
+    assert len(result.aggregates["events"]) == 1
+    assert next(iter(result.aggregates["events"].values()))["registered"] == 2
+
+
 def test_existing_contact_suggestion_is_suppressed(fake_book):
     run = run_context(fake_book)
     run.book.write("members", Member, [Member(insead_id="1", name="Synthetic Person", do_not_contact=True)])

@@ -343,7 +343,6 @@ def reconcile(
                     suggested_action="Accept",
                 )
 
-    # 4. aggregates for the brief. No personal data.
     agg = aggregates(base, matches, engaged, propose.proposals, as_of)
     return ReconcileResult(proposals=propose.proposals, matches=matches, aggregates=agg)
 
@@ -353,11 +352,13 @@ def aggregates(
 ) -> dict:
     year_end = Date((as_of or Date.today()).year, 12, 31)
     active = [m for m in members if m.status == "Active"]
-    by_event: dict[str, Counter] = defaultdict(Counter)
+    by_event: dict[tuple, Counter] = defaultdict(Counter)
+    event_labels = {}
     for r, mt in matches:
         if r.source == Source.EVENTBRITE:
             identity, event_date = event_key(r)
-            ev = f"{r.payload.get('event', '?')} [{identity}; {event_date or 'undated'}]"
+            ev = event_key(r)
+            event_labels[ev] = f"{r.payload.get('event', '?')} [{identity}; {event_date or 'undated'}]"
             by_event[ev]["registered"] += 1
             by_event[ev]["matched"] += mt.insead_id is not None
             if r.payload.get("checked_in") is not None:
@@ -371,6 +372,6 @@ def aggregates(
         "by_programme_active": dict(Counter(m.programme for m in active)),
         "segments": dict(Counter(segment(m, m.insead_id in engaged, as_of) for m in members)),
         "match_methods": dict(Counter(mt.method.value for _, mt in matches)),
-        "events": {k: dict(v) for k, v in by_event.items()},
+        "events": {event_labels[key]: dict(counts) for key, counts in by_event.items()},
         "proposals_by_category": dict(Counter(p.category for p in proposals)),
     }

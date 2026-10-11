@@ -91,5 +91,16 @@ def attendee_key(record: SourceRecord) -> tuple:
 def drop_file_duplicates(from_files: list[SourceRecord], from_api: list[SourceRecord]) -> list[SourceRecord]:
     """Drop file records for events the API also returned. The API copy has check-in."""
     api_events = {event_key(record) for record in from_api}
-    unique = {attendee_key(record): record for record in from_files if event_key(record) not in api_events}
+    api_names: dict[tuple, set] = {}
+    for record in from_api:
+        name = " ".join(str(record.payload.get("event", "")).lower().split())
+        if name and record.date:
+            api_names.setdefault((name, record.date), set()).add(event_key(record))
+    unique = {}
+    for record in from_files:
+        if event_key(record) in api_events:
+            continue
+        if not record.payload.get("event_id") and len(api_names.get(event_key(record), ())) == 1:
+            continue
+        unique[attendee_key(record)] = record
     return list(unique.values())

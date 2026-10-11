@@ -77,6 +77,15 @@ def test_overlapping_event_files_are_deduplicated():
     assert records[0].payload["barcode"] == "bc1"
 
 
+def test_event_file_without_id_matches_only_an_unambiguous_api_event():
+    record = parse_attendees_csv((FIXTURES / "eventbrite_attendees.csv").read_bytes())[0]
+    without_id = record.model_copy(update={"payload": record.payload | {"event_id": ""}})
+    assert drop_file_duplicates([without_id], [record]) == []
+    different_event = record.model_copy(update={"payload": record.payload | {"event_id": "other"}})
+    assert drop_file_duplicates([without_id], [record, different_event]) == [without_id]
+    assert drop_file_duplicates([record], [different_event]) == [record]
+
+
 def test_eventbrite_requests_completed_events_and_keeps_identity(monkeypatch):
     from datetime import date
 
