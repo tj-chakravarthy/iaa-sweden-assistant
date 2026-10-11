@@ -15,6 +15,14 @@ New-record proposals contain the complete minimised record in `new`. The
 export must still match that snapshot when approval is applied. Existing
 field changes require the current value to match `old`; conflicts stay open.
 
+A proposal raised from the INSEAD export stands only while the export says
+so. A newer export replaces or removes an undecided one, and an approved one
+is not applied if the export has changed since. A "no" stands until the
+difference goes away. Proposals added by hand are left alone.
+
+The brief counts follow the latest export. Segments stored in `members`
+follow the status that has been approved.
+
 All exported profile fields are reconciled. Exported and learned email
 aliases are merged with existing aliases, one row per member.
 

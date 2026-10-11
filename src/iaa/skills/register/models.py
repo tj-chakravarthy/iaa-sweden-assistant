@@ -13,6 +13,29 @@ from ...core.normalize import parse_date
 KIND = "register-change"  # the one kind of proposal this skill raises and carries out
 HOME_NAA = "IAA SWE"  # this association, as the NAA / IAA column spells it
 ADDED_LATER = ("status_changed",)  # columns a members tab made earlier may lack
+EXPORT_SOURCE = "insead"  # the source of a row raised from the INSEAD export
+
+# Fields the INSEAD export decides. The rest belong to the register and are
+# carried over when a new export is the basis of a run.
+EXPORT_FIELDS = (
+    "name",
+    "programme",
+    "promotion",
+    "naa",
+    "status",
+    "member_start",
+    "member_expire",
+    "tender_type",
+    "company",
+    "industry",
+    "function",
+    "city",
+    "country",
+    "region",
+    "email_preferred",
+    "email_insead",
+    "aliases",
+)
 
 
 class MatchMethod(StrEnum):

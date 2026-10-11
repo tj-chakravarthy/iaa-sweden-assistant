@@ -24,7 +24,7 @@ import typer
 
 from .core import policy
 from .core.config import load_env, settings
-from .core.proposals import CHANGELOG_COLS, decide, summary
+from .core.proposals import CHANGELOG_COLS, decide, reopened_rows, summary
 from .core.skill import RUN_COLS, Run, Skill
 from .registry import SKILLS
 
@@ -107,6 +107,9 @@ def _raise_proposals(run: Run, skills: Sequence[Skill], details: bool) -> None:
                 run.book.write_proposals(refreshed)
             run.book.append_proposals(proposals)
             waiting = len(refreshed) + len(proposals)
+            reopened = reopened_rows(run.book.rows("changelog"), s.withdrawn(run), run.run_id)
+            if reopened:
+                run.book.append("changelog", CHANGELOG_COLS, reopened)
             if brief:
                 run.book.write_text(f"brief_{s.name}_{run.today:%Y-%m}", brief)
         typer.echo(f"{s.name}, run {run.run_id}" + (" (dry run, nothing written)" if run.dry_run else ""))

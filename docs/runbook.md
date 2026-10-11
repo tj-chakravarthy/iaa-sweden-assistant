@@ -10,7 +10,9 @@
    to decide later.
 3. Payment items go to the treasurer, who updates the INSEAD portal. `yes`
    means handled.
-4. Paste the brief tab into the board agenda.
+4. Paste the brief tab into the board agenda. Its figures follow the latest
+   INSEAD export, including changes you have not approved yet. Segments
+   stored in `members` follow the status you have approved.
 
 ## What a decision does
 
@@ -24,6 +26,16 @@
 
 - A `no` or an acknowledged item is a standing decision. That exact proposal
   is not raised again. A different change to the same member is.
+- A `no` on a change that comes from INSEAD stands while INSEAD keeps saying
+  the same. If the difference goes away, the changelog gets a `reopened` row,
+  and if it later comes back you are asked again. Example: you say no to a
+  lapse, the member renews, and a year later lapses again.
+- A row raised from the INSEAD export follows the export. If a newer export
+  says something else, an undecided row is replaced or removed. A `yes` on a
+  row the export no longer supports is not applied: it stays with a note until
+  the next reconcile replaces it.
+- A row you add by hand is never replaced or checked against the export.
+  Leave its `source` blank.
 - A `no` to adding a person stands even if their record changes later.
 - If a record changes before anyone decides on adding it, its row is replaced
   by one with the new details.

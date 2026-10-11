@@ -6,6 +6,12 @@ numbers. This is the October 2026 manual run, restructured.
 known (core.proposals) stops a run from raising what is already open or
 answered.
 
+A row raised from the INSEAD export stands only while the export says so.
+live lists the rows this run stands by, so that older ones can be replaced.
+
+Stored segments follow the status the register has accepted, not a status
+change that is still waiting for a decision. The brief follows the export.
+
 Derived values (segment, event counts, payment years) change for many members
 at once. They go in one row per run, not one per member, so the rows that need
 a person's judgement stay readable.
@@ -25,30 +31,9 @@ from ...core.policy import assert_minimised
 from ...core.proposals import Proposer
 from .apply import DERIVED, value_text
 from .match import Matcher
-from .models import HOME_NAA, KIND, Match, MatchMethod, Member
+from .models import EXPORT_FIELDS, EXPORT_SOURCE, HOME_NAA, KIND, Match, MatchMethod, Member
 from .sources.eventbrite import attendee_key, event_key
 
-# Fields the INSEAD export decides. The rest belong to the register and are
-# carried over when a new export is the basis of a run.
-EXPORT_FIELDS = (
-    "name",
-    "programme",
-    "promotion",
-    "naa",
-    "status",
-    "member_start",
-    "member_expire",
-    "tender_type",
-    "company",
-    "industry",
-    "function",
-    "city",
-    "country",
-    "region",
-    "email_preferred",
-    "email_insead",
-    "aliases",
-)
 REGISTER_OWNED = (
     "status_prev",
     "status_changed",
@@ -62,6 +47,10 @@ REGISTER_OWNED = (
 NO_CONTACT = "None: marked do-not-contact"
 DERIVED_UPDATE = "derived-update"  # category of the row that carries derived values
 NEW_RECORD = "new-record"
+NOT_IN_EXPORT = "not-in-export"
+# Categories of rows raised from the export. Each is a question the export asks now:
+# when a newer export stops asking it, the row is out of date.
+FROM_EXPORT = (NEW_RECORD, "profile-update", "lapsed", "reactivated", NOT_IN_EXPORT)
 UNCONFIRMED = {
     MatchMethod.AMBIGUOUS: "payer name is shared by several records",
     MatchMethod.ALIAS_AMBIGUOUS: "the aliases tab gives this name to several records",
@@ -181,7 +170,7 @@ def reconcile(
     if new_export is not None:
         if not new_export or len({member.insead_id for member in new_export}) != len(new_export):
             raise ValueError("empty export or duplicate INSEAD IDs")
-        live[NEW_RECORD] = set()
+        live.update({category: set() for category in FROM_EXPORT})
         for n in new_export:
             c = by_id.get(n.insead_id)
             if c is None and n.insead_id in declined:
@@ -194,7 +183,7 @@ def reconcile(
                     old="",
                     new=n.model_dump_json(),
                     reason="present in INSEAD export, not in register",
-                    source="insead",
+                    source=EXPORT_SOURCE,
                     category=NEW_RECORD,
                     suggested_action="Add to register",
                 )
@@ -215,31 +204,33 @@ def reconcile(
                     action = "Accept"
                     if cat == "lapsed":
                         action = NO_CONTACT if c.do_not_contact else "Renewal reminder"
-                    propose(
+                    key = propose(
                         subject_id=n.insead_id,
                         subject=n.name,
                         field=f,
                         old=o,
                         new=v,
                         reason="INSEAD export differs from register",
-                        source="insead",
+                        source=EXPORT_SOURCE,
                         category=cat,
                         suggested_action=action,
                     )
+                    live[cat].add(key)
         in_export = {n.insead_id for n in new_export}
         for c in current:
             if c.insead_id not in in_export:
-                propose(
+                key = propose(
                     subject_id=c.insead_id,
                     subject=c.name,
                     field="record",
                     old="in register",
                     new="absent from INSEAD export",
                     reason="in the register but not in the latest INSEAD export",
-                    source="insead",
-                    category="not-in-export",
+                    source=EXPORT_SOURCE,
+                    category=NOT_IN_EXPORT,
                     suggested_action="Check: moved to another association, removed, or a filtered export",
                 )
+                live[NOT_IN_EXPORT].add(key)
 
     # 2. other sources: match
     base = _basis(current, new_export)
@@ -357,7 +348,10 @@ def reconcile(
     derived: dict[str, dict[str, list[str]]] = {}
     for m in base:
         changes: dict[str, list[str]] = {}
-        if m.insead_id in engaged and m.status != "Active" and m.segment != "engaged-non-member":
+        # The status the register has accepted. A lapse from the export that is
+        # rejected, or not decided yet, must not show up as a stored segment.
+        accepted = by_id.get(m.insead_id, m)
+        if m.insead_id in engaged and accepted.status != "Active" and m.segment != "engaged-non-member":
             via = engaged_by[m.insead_id]
             signs = ["registered for events"] if via - {Source.MAILCHIMP.value} else []
             signs += ["clicks in newsletters"] if Source.MAILCHIMP.value in via else []
@@ -372,7 +366,7 @@ def reconcile(
                 category="engaged-non-member",
                 suggested_action=NO_CONTACT if m.do_not_contact else "Membership ask",
             )
-        target_segment = segment(m, m.insead_id in engaged, as_of)
+        target_segment = segment(accepted, m.insead_id in engaged, as_of)
         if target_segment != "engaged-non-member" and m.segment != target_segment:
             changes["segment"] = [m.segment, target_segment]
         for name, value in metrics[m.insead_id].items():
@@ -407,6 +401,7 @@ def reconcile(
     live[DERIVED_UPDATE] = {propose(**row) for row in _derived_rows(derived)}
 
     agg = aggregates(base, matches, engaged, propose.proposals, as_of)
+    agg["basis"] = "export" if new_export is not None else "register"
     return ReconcileResult(proposals=propose.proposals, matches=matches, aggregates=agg, live=live)
 
 

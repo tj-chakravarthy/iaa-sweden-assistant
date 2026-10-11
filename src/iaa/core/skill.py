@@ -108,3 +108,5 @@ class Skill:
     selftest: Callable[[], tuple[bool, list[str]]]
     # Rewrite or drop open proposals. Called before deciding, and after this skill has proposed.
     refresh: Callable[[Run, list[Proposal]], list[Proposal]] = lambda run, proposals: proposals
+    # Keys of rejected or acknowledged rows whose question has gone away. Called after proposing.
+    withdrawn: Callable[[Run], set[str]] = lambda run: set()

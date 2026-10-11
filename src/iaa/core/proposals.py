@@ -9,6 +9,10 @@ the skill to carry it out, and the changelog records the outcome:
 
 A "yes" that cannot be carried out stays open with the reason in note.
 
+A fourth outcome, reopened, is written by a run that finds the question behind
+a rejected or acknowledged row has gone away. From then on the answer no longer
+stands, so if the question comes back it is asked again.
+
 Sources are read again on every run. To avoid asking twice, each proposal
 has a key (kind, subject, field, old, new). A key that is open, rejected or
 acknowledged is not raised again (known_keys).
@@ -29,6 +33,7 @@ from .policy import approved, rejected
 KEY_FIELDS = ("kind", "subject_id", "subject", "field", "old", "new")
 CHANGELOG_COLS = ["applied_at", "run_id", *KEY_FIELDS, "reason", "source", "category", "outcome"]
 SETTLED = ("acknowledged", "rejected")  # outcomes after which the same proposal is not raised again
+REOPENED = "reopened"  # undoes that: the question went away, so the answer no longer stands
 
 # Carries out one approved proposal. Returns (outcome, why not).
 # outcome is "applied", "acknowledged", or "" if it could not be done.
@@ -44,13 +49,32 @@ def key_of(p: Proposal) -> str:
     return proposal_key(*(getattr(p, f) for f in KEY_FIELDS))
 
 
+def settled_rows(changelog: Iterable[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    """Key -> the changelog row whose answer still stands. Rows are read in the order they were written."""
+    settled: dict[str, Mapping[str, Any]] = {}
+    for row in changelog:
+        key = proposal_key(*(str(row.get(f, "")) for f in KEY_FIELDS))
+        if row.get("outcome") in SETTLED:
+            settled[key] = row
+        elif row.get("outcome") == REOPENED:
+            settled.pop(key, None)
+    return settled
+
+
 def known_keys(open_proposals: Iterable[Proposal], changelog: Iterable[Mapping[str, Any]]) -> set[str]:
-    """Keys not to raise again: open proposals and settled changelog rows."""
-    keys = {key_of(p) for p in open_proposals}
-    keys |= {
-        proposal_key(*(str(row.get(f, "")) for f in KEY_FIELDS)) for row in changelog if row.get("outcome") in SETTLED
-    }
-    return keys
+    """Keys not to raise again: open proposals and answers that still stand."""
+    return {key_of(p) for p in open_proposals} | set(settled_rows(changelog))
+
+
+def reopened_rows(changelog: Iterable[Mapping[str, Any]], keys: Iterable[str], run_id: str) -> list[list]:
+    """Changelog rows saying the standing answers with these keys no longer stand."""
+    settled = settled_rows(changelog)
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    return [
+        [now, run_id, *(str(settled[key].get(c, "")) for c in CHANGELOG_COLS[2:-1]), REOPENED]
+        for key in sorted(keys)
+        if key in settled
+    ]
 
 
 class Proposer:

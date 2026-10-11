@@ -18,6 +18,10 @@ points, no adjectives, numbers as given. Point out the one or two figures that n
 
 def render(run_date: date, agg: dict, llm: LLMClient | None = None) -> str:
     L = [f"# Membership brief - {run_date:%B %Y}", ""]
+    if agg.get("basis") == "export":
+        L += ["Figures follow the latest INSEAD export, including changes not yet approved.", ""]
+    elif agg.get("basis") == "register":
+        L += ["Figures follow the register. No INSEAD export was read.", ""]
     L.append(
         f"- Alumni records: {agg['records']}; active memberships: {agg['active']} ({agg['active_iaa_swe']} IAA Sweden)."
     )

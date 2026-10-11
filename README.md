@@ -39,7 +39,8 @@ inbox (Drive), Eventbrite, Mailchimp
 
 - Matching order: INSEAD ID, email, alias, name. A near-match is only shown
   as a candidate.
-- A proposal is not raised twice.
+- A proposal is not raised twice. One raised from the INSEAD export is
+  replaced or dropped when a newer export says something else.
 - Applied decisions, member updates and their audit entries commit together.
   A run locks out other runs while it writes. `iaa unlock` clears a lock left
   by an interrupted run; see the runbook.

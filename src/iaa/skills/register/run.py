@@ -14,15 +14,16 @@ from pathlib import Path
 
 from ...core.models import Proposal, SourceRecord
 from ...core.policy import approved, rejected
-from ...core.proposals import SETTLED, key_of, proposal_key
+from ...core.proposals import SETTLED, key_of, proposal_key, settled_rows
 from ...core.skill import Run, Skill
 from . import sources
 from .apply import apply, carry_out
 from .brief import render
-from .models import ADDED_LATER, KIND, Member
+from .models import ADDED_LATER, EXPORT_FIELDS, EXPORT_SOURCE, KIND, Member
 from .reconcile import NEW_RECORD, reconcile
 
 FIXTURES = Path(__file__).resolve().parents[4] / "tests" / "fixtures"
+RAISED_BY_A_RUN = (EXPORT_SOURCE, "register")  # sources reconcile writes. A row added by hand has another
 
 
 @dataclass
@@ -145,13 +146,33 @@ def propose(run: Run) -> tuple[list[Proposal], str]:
 
 
 def _out_of_date(proposal: Proposal, live: dict[str, set[str]]) -> bool:
-    """An open row this run has replaced. A decision waiting to be applied is kept."""
+    """An open row this run no longer stands by. A decision waiting to be applied
+    is kept, and so is any row a person added: only the run's own rows go.
+    """
     return (
         proposal.kind == KIND
+        and proposal.source in RAISED_BY_A_RUN
         and proposal.category in live
         and key_of(proposal) not in live[proposal.category]
         and (not proposal.approve.strip() or bool(proposal.note))
     )
+
+
+def withdrawn(run: Run) -> set[str]:
+    """Answers to questions the export has stopped asking, e.g. a no to a lapse
+    for someone who has since renewed. If the question returns, it is asked again.
+    A no to adding a person is not among them: that stands.
+    """
+    live = run.memo.get("register.live", {})
+    return {
+        key
+        for key, row in settled_rows(run.book.rows("changelog")).items()
+        if row.get("kind") == KIND
+        and row.get("source") == EXPORT_SOURCE
+        and row.get("category") != NEW_RECORD
+        and row.get("category") in live
+        and key not in live[row.get("category")]
+    }
 
 
 def refresh(run: Run, proposals: list[Proposal]) -> list[Proposal]:
@@ -179,11 +200,15 @@ class _Applier:
         self.export_error = False
 
     def carry_out(self, p: Proposal) -> tuple[str, str]:
-        if p.category == NEW_RECORD and self.export_by_id is None:
+        # A row raised from the export is checked against the export as it is now.
+        from_export = p.category == NEW_RECORD or (
+            p.source == EXPORT_SOURCE and (p.field in EXPORT_FIELDS or p.field == "record")
+        )
+        if from_export and self.export_by_id is None:
             box = _read_sources(self.run, include_records=False)  # once: it parses the whole inbox
             self.export_error = box.export_error
             self.export_by_id = {member.insead_id: member for member in (box.export or [])}
-        if p.category == NEW_RECORD and self.export_error:
+        if from_export and self.export_error:
             return "", "the latest export is unavailable or invalid"
         return carry_out(p, self.by_id, self.export_by_id or {}, self.run.today)
 
@@ -226,4 +251,5 @@ SKILL = Skill(
     applier=_Applier,
     selftest=selftest,
     refresh=refresh,
+    withdrawn=withdrawn,
 )

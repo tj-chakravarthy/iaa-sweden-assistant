@@ -9,6 +9,10 @@ approval and calls carry_out for each "yes". Outcomes:
 - ""            unknown member, record not in the export, or a value of the
                 wrong type. The proposal stays open with the reason.
 
+A row raised from the INSEAD export is only carried out while the export in
+the inbox still says so. If the export has moved on, the row stays open with a
+note and the next reconcile replaces it. Rows added by hand are not checked.
+
 Derived values (segment, event counts, payment years) come as one row for many
 members. Its new cell is JSON: {id: {field: [old, new]}}. All of it applies or
 none of it.
@@ -24,11 +28,12 @@ from pydantic import ValidationError
 from ...core.models import Proposal
 from ...core.normalize import iso_date
 from ...core.proposals import decide
-from .models import KIND, Member
+from .models import EXPORT_FIELDS, EXPORT_SOURCE, KIND, Member
 
 DATE_FIELDS = ("member_start", "member_expire")  # stored as YYYY-MM-DD
 INFORMATIONAL = {"payment", "alias", "record"}
 DERIVED = "derived"  # the field of a row that carries derived values for many members
+MOVED_ON = "the INSEAD export no longer says this; the next reconcile replaces the row"
 DERIVED_FIELDS = ("segment", "paid_direct_years", "events_registered", "events_attended", "events_no_show")
 
 
@@ -97,6 +102,9 @@ def carry_out(
             return "", "the source record changed; review a fresh proposal"
         by_id[p.subject_id] = snapshot
         return "applied", ""
+    from_export = p.source == EXPORT_SOURCE and bool(export_by_id)  # there is an export to check against
+    if from_export and p.field == "record" and p.subject_id in export_by_id:
+        return "", MOVED_ON
     if p.field in INFORMATIONAL:
         return "acknowledged", ""
     if p.field not in Member.model_fields:
@@ -124,6 +132,13 @@ def carry_out(
         expected = expected.strip().lower()
     if actual != expected:
         return "", "the current value differs from the reviewed old value"
+    if from_export and p.field in EXPORT_FIELDS:
+        latest = export_by_id.get(p.subject_id)
+        wanted = getattr(latest, p.field, None)
+        if p.field == "aliases" and latest is not None:
+            wanted = sorted(set(m.aliases) | set(latest.aliases))
+        if latest is None or value_text(wanted) != value_text(getattr(updated, p.field)):
+            return "", MOVED_ON
     if p.field == "status":
         updated.status_prev = m.status
         updated.status_changed = (as_of or date.today()).isoformat()

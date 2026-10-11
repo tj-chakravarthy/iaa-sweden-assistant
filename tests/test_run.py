@@ -141,11 +141,102 @@ def another_event(book, number):
     book.inbox[f"dinner{number}.csv"] = as_csv(rows)
 
 
-def change_company(book, company):
-    """A newer export in which the first record has another company."""
+def edit_export(book, column, value):
+    """A newer export in which the first record (900000) has another value."""
     rows = read_rows(book.inbox["Download (3).csv"])
-    rows[4][rows[3].index("Company")] = company
+    rows[4][rows[3].index(column)] = value
     book.inbox["Download (3).csv"] = as_csv(rows)
+
+
+def change_company(book, company):
+    edit_export(book, "Company", company)
+
+
+def loaded(book):
+    """A register with the 30 members in it and nothing waiting."""
+    run("run-all")
+    decide(book)
+    run("run-all")
+    decide(book)
+    run("run-all")
+    assert len(members(book)) == 30 and book.data("proposals") == []
+
+
+def rows_of(book, category):
+    return [dict(zip(PROPOSAL_COLS, row, strict=False)) for row in book.data("proposals") if row[CATEGORY] == category]
+
+
+def first_member(book):
+    return next(m for m in members(book) if m.insead_id == "900000")
+
+
+def test_a_profile_change_follows_the_export(book):
+    loaded(book)
+    change_company(book, "Other AB")
+    run("register", "reconcile")
+    (row,) = rows_of(book, "profile-update")
+    assert (row["old"], row["new"]) == ("Example AB", "Other AB")
+
+    change_company(book, "Third AB")  # the export changes again before anyone decides
+    run("register", "reconcile")
+    (row,) = rows_of(book, "profile-update")
+    assert row["new"] == "Third AB"
+
+    change_company(book, "Example AB")  # and back to what the register has: nothing to ask
+    assert "new proposals: 0" in run("register", "reconcile")
+    assert not rows_of(book, "profile-update")
+
+
+def test_a_yes_on_a_change_the_export_has_dropped_is_not_applied(book):
+    loaded(book)
+    change_company(book, "Other AB")
+    run("register", "reconcile")
+    decide(book)
+    change_company(book, "Third AB")  # after the yes, before the run that would apply it
+    out = run("run-all")
+    assert "applied 0" in out and "1 approved but not applicable" in out
+    assert first_member(book).company == "Example AB"
+    (row,) = rows_of(book, "profile-update")  # the stale row is gone, a fresh one asks about Third AB
+    assert (row["new"], row["approve"], row["note"]) == ("Third AB", "", "")
+
+
+def test_a_row_added_by_hand_is_left_alone_and_applied(book):
+    loaded(book)
+    by_hand = dict.fromkeys(PROPOSAL_COLS, "")
+    by_hand |= dict(
+        kind="register-change", subject_id="900000", subject="x", field="company", category="profile-update"
+    )
+    by_hand |= dict(old="Example AB", new="By Hand AB")
+    book.tabs["proposals"].cells.append([by_hand[c] for c in PROPOSAL_COLS])
+    run("register", "reconcile")  # the export says Example AB, which is not what this row says
+    assert [row["new"] for row in rows_of(book, "profile-update")] == ["By Hand AB"]
+    decide(book)
+    run("run-all")
+    assert first_member(book).company == "By Hand AB"
+
+
+def test_a_no_on_a_lapse_is_asked_again_if_the_lapse_comes_back(book):
+    loaded(book)
+    edit_export(book, "Membership", "Inactive")
+    run("register", "reconcile")
+    assert len(rows_of(book, "lapsed")) == 1
+    decide(book, lambda category: "no" if category == "lapsed" else "")
+    assert "rejected 1" in run("run-all")
+    assert first_member(book).status == "Active" and not rows_of(book, "lapsed")
+    run("run-all")  # the export still says Inactive: the no stands
+    assert not rows_of(book, "lapsed")
+    assert not [row for row in book.data("changelog") if row[OUTCOME] == "reopened"]
+
+    edit_export(book, "Membership", "Active")  # renewed: the question is gone
+    run("run-all")
+    reopened = [row for row in book.data("changelog") if row[OUTCOME] == "reopened"]
+    assert len(reopened) == 1 and reopened[0][CHANGELOG_COLS.index("field")] == "status"
+    run("run-all")
+    assert len([row for row in book.data("changelog") if row[OUTCOME] == "reopened"]) == 1
+
+    edit_export(book, "Membership", "Inactive")  # lapsed again, a year on: asked again
+    run("run-all")
+    assert len(rows_of(book, "lapsed")) == 1
 
 
 def test_a_changed_record_replaces_its_undecided_row(book):
