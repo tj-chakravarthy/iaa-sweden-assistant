@@ -122,9 +122,11 @@ the proposals or changelog headers; a mismatched append is refused.
 - A scheduled run did not happen: GitHub switches off schedules in a public
   repository after 60 days without a commit. Re-enable the two workflows under
   Actions.
-- A date typed into `proposals` is read in the spreadsheet's own format. Keep
-  the spreadsheet's locale as Sweden (File, Settings) so it reads as
-  `2026-12-31`. With a day-first locale, `03/04/2027` would be read as 4 March.
+- Type dates as `2026-12-31`, in `proposals` and in the payments sheet. Keep
+  the spreadsheet's locale as Sweden (File, Settings) so a typed date stays in
+  that form. A date such as `03/04/2027` could be 3 April or 4 March. It is
+  refused: the proposal stays open with a note, and a payments sheet
+  containing one is reported as unreadable.
 - Do not add, rename or remove columns in `proposals` or `members`. A run
   that finds other headings than its own stops before reading or writing
   anything, so that no column's data is lost. Put the headings back and run

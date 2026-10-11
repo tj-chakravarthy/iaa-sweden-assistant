@@ -7,8 +7,8 @@ Quirks (October 2026 export):
 - Four email columns. Alumni often register for events with a fifth.
 - Postal/city come as Home and Preferred. Home is the better region signal.
 - Surnames may be transliterated (Sjöberg -> Sjoeberg).
-- Dates are 12/31/2026 in the CSV and date cells in the XLSX. Both are stored
-  as 2026-12-31.
+- Dates are month first, 12/31/2026, in the CSV and date cells in the XLSX.
+  Both are stored as 2026-12-31.
 - A person in two associations has one row per association. One is kept, the
   IAA SWE row if there is one.
 """
@@ -99,8 +99,8 @@ def parse_insead_export(raw: bytes) -> list[Member]:
         kw = {v: (r.get(k) or "").strip() for k, v in KEEP.items()}
         kw["email_preferred"] = norm_email(kw["email_preferred"])
         kw["email_insead"] = norm_email(kw["email_insead"])
-        kw["member_start"] = iso_date(kw["member_start"])
-        kw["member_expire"] = iso_date(kw["member_expire"])
+        kw["member_start"] = iso_date(kw["member_start"], month_first=True)
+        kw["member_expire"] = iso_date(kw["member_expire"], month_first=True)
         members.append(
             Member(
                 name=name,

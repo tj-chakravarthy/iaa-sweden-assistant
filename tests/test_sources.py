@@ -1,10 +1,12 @@
 """Files as the board drops them: CSV or XLSX, any name. Workbooks are built in memory from the fixtures."""
 
+import csv
 import io
 from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
+import pytest
 
 from iaa.core.connectors import eventbrite
 from iaa.core.models import Source, SourceRecord
@@ -42,7 +44,8 @@ def as_xlsx(csv_name: str, date_columns: tuple[str, ...] = ()) -> bytes:
 def test_dates_are_stored_one_way():
     for written in ("12/31/2026", "2026-12-31", "2026-12-31 00:00:00", "2026/12/31", "31.12.2026", "31/12/2026"):
         assert iso_date(written) == "2026-12-31"
-    assert iso_date("02/03/2026") == "2026-02-03"  # slashes: month first, as INSEAD writes it
+    assert iso_date("02/03/2026", month_first=True) == "2026-02-03"  # as INSEAD writes it
+    assert iso_date("02/03/2026") == "02/03/2026"  # 2 March or 3 February: not guessed
     assert iso_date("not a date") == "not a date"
     assert iso_date("13/13/2026") == "13/13/2026"
     assert iso_date(None) == ""
@@ -87,8 +90,6 @@ def test_csv_saved_by_excel_on_windows_keeps_its_letters():
 
 
 def test_not_an_insead_export_says_so():
-    import pytest
-
     with pytest.raises(ValueError, match="not an INSEAD export"):
         parse_insead_export((FX / "payments.csv").read_bytes())
 
@@ -204,3 +205,23 @@ def test_a_spreadsheet_that_will_not_open_is_not_just_another_file():
     assert classify(archive("notes.txt")) == "unknown"
     assert classify(old_office + "WordDocument".encode("utf-16-le")) == "unknown"
     assert classify(as_xlsx("payments.csv")) == "payments"
+
+
+def test_a_slash_date_is_read_month_first_only_from_insead():
+    rows = read_rows((FX / "insead_export.csv").read_bytes())
+    rows[4][rows[3].index("Expire Date Membership")] = "05/01/2026"
+    stream = io.StringIO()
+    csv.writer(stream).writerows(rows)
+    assert parse_insead_export(stream.getvalue().encode())[0].member_expire == "2026-05-01"
+
+    rows = read_rows((FX / "payments.csv").read_bytes())
+    paid = next(index for index, row in enumerate(rows) if row[0].strip() == "1")
+    rows[paid][1] = "25/01/2025"  # can only be 25 January
+    stream = io.StringIO()
+    csv.writer(stream).writerows(rows)
+    assert parse_payments_csv(stream.getvalue().encode())[0].date == date(2025, 1, 25)
+    rows[paid][1] = "05/01/2025"  # 5 January to the treasurer, 1 May to the old parser
+    stream = io.StringIO()
+    csv.writer(stream).writerows(rows)
+    with pytest.raises(ValueError, match="payment dates"):
+        parse_payments_csv(stream.getvalue().encode())

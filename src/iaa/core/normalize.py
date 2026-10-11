@@ -4,7 +4,8 @@ From the October 2026 manual run:
 - INSEAD transliterates Swedish letters (Sjöberg -> Sjoeberg), payments and
   Eventbrite do not. Folding oe/ae/aa/ue makes them equal.
 - Postal code is a better region signal than city spelling.
-- The same date comes as 12/31/2026 (CSV) and as a date cell (XLSX).
+- The same date comes as 12/31/2026 (CSV) and as a date cell (XLSX). INSEAD
+  writes the month first. Other sources are not assumed to.
 """
 
 from __future__ import annotations
@@ -32,10 +33,13 @@ def norm_name(s: str | None) -> str:
     return " ".join(s.split())
 
 
-def parse_date(s: str | None) -> Date | None:
-    """Parse 2026-12-31, 2026-12-31 00:00:00, 2026/12/31, 12/31/2026 or 31.12.2026.
-    With slashes the month is first, as INSEAD writes it, unless that is
-    impossible. None if not a date.
+def parse_date(s: str | None, month_first: bool = False) -> Date | None:
+    """Parse 2026-12-31, 2026-12-31 00:00:00, 2026/12/31, 31.12.2026 or a slash date.
+
+    05/01/2025 is 1 May in the INSEAD export and 5 January in Sweden. Pass
+    month_first for a source known to write the month first. Otherwise a slash
+    date is read only when one part is above 12, and refused when it could be
+    either. None if not a date.
     """
     s = (s or "").strip()
     try:
@@ -45,15 +49,18 @@ def parse_date(s: str | None) -> Date | None:
             return Date(int(m[3]), int(m[2]), int(m[1]))
         if m := re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", s):
             a, b = int(m[1]), int(m[2])
-            return Date(int(m[3]), b, a) if a > 12 else Date(int(m[3]), a, b)
+            if a > 12:
+                return Date(int(m[3]), b, a)
+            if month_first or b > 12:
+                return Date(int(m[3]), a, b)
     except ValueError:
         pass
     return None
 
 
-def iso_date(s: str | None) -> str:
+def iso_date(s: str | None, month_first: bool = False) -> str:
     """parse_date as YYYY-MM-DD. Other text is returned unchanged."""
-    d = parse_date(s)
+    d = parse_date(s, month_first)
     return d.isoformat() if d else (s or "").strip()
 
 

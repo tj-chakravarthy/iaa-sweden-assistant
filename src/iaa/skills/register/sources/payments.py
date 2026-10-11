@@ -4,6 +4,7 @@ Layout (2025 sheet): title row, blank, header
 No.,Date,Name,Amount Received (SEK),End date,Updated in INSEADs Alumni Database?,Comments
 then section rows "Bank Transfer Payments:" / "Swish Payments:" and numbered rows.
 Names only, no email or ID, so matching is by name.
+Dates are 2025-01-05. A slash date that could be read two ways is refused.
 """
 
 from __future__ import annotations
