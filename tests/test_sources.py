@@ -232,3 +232,16 @@ def test_a_slash_date_is_read_month_first_only_from_insead():
     csv.writer(stream).writerows(rows)
     with pytest.raises(ValueError, match="payment dates"):
         parse_payments_csv(stream.getvalue().encode())
+
+
+def test_an_address_given_as_both_business_and_home_is_kept_once():
+    rows = read_rows((FX / "insead_export.csv").read_bytes())
+    for column in ("Business E-mail", "Home e-mail"):
+        rows[4][rows[3].index(column)] = "Both@Example.org"
+    stream = io.StringIO()
+    csv.writer(stream).writerows(rows)
+    export = parse_insead_export(stream.getvalue().encode())
+    assert export[0].aliases == ["both@example.org"]
+    # so loading the record raises no row about its own addresses
+    result = reconcile("t", [], export, [], {}, as_of=AS_OF)
+    assert {proposal.category for proposal in result.proposals} == {"new-record"}

@@ -99,7 +99,8 @@ def parse_insead_export(raw: bytes) -> list[Member]:
         name = f"{first or pref} {last}".strip()
         if not name:
             raise ValueError("missing member name")
-        extra = [norm_email(r.get(c, "")) for c in ("Business E-mail", "Home e-mail")]
+        # the same address is often given as both, and is kept once
+        extra = dict.fromkeys(norm_email(r.get(c, "")) for c in ("Business E-mail", "Home e-mail"))
         kw = {v: (r.get(k) or "").strip() for k, v in KEEP.items()}
         kw["email_preferred"] = norm_email(kw["email_preferred"])
         kw["email_insead"] = norm_email(kw["email_insead"])
