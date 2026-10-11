@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date as Date
 
@@ -62,6 +62,10 @@ REGISTER_OWNED = (
 NO_CONTACT = "None: marked do-not-contact"
 DERIVED_UPDATE = "derived-update"  # category of the row that carries derived values
 NEW_RECORD = "new-record"
+UNCONFIRMED = {
+    MatchMethod.AMBIGUOUS: "payer name is shared by several records",
+    MatchMethod.ALIAS_AMBIGUOUS: "the aliases tab gives this name to several records",
+}
 CELL_LIMIT = 40_000  # a Sheets cell holds 50,000 characters
 
 
@@ -151,7 +155,7 @@ def reconcile(
     current: list[Member],
     new_export: list[Member] | None,
     records: list[SourceRecord],
-    aliases: dict[str, str],
+    aliases: Mapping[str, str | Iterable[str]],
     known: Iterable[str] = (),
     as_of: Date | None = None,
     declined: Iterable[str] = (),
@@ -293,16 +297,14 @@ def reconcile(
                     subject=r.name,
                     field="payment",
                     new=paid,
-                    reason=(
-                        "payer name is shared by several records"
-                        if mt.method == MatchMethod.AMBIGUOUS
-                        else "payer name is close to a record, not identical"
-                    )
+                    reason=UNCONFIRMED.get(mt.method, "payer name is close to a record, not identical")
                     + f"; candidates {mt.candidates}",
                     source=f"payments {r.external_id}",
                     confidence=mt.confidence,
                     category="payment-unconfirmed-match",
-                    suggested_action="Confirm who paid, then add the name to the aliases tab",
+                    suggested_action="Leave one row for this name in the aliases tab"
+                    if mt.method == MatchMethod.ALIAS_AMBIGUOUS
+                    else "Confirm who paid, then add the name to the aliases tab",
                 )
             elif mt.insead_id is None:
                 propose(

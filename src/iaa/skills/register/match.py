@@ -3,7 +3,8 @@
 Order of evidence, strongest first:
 1. INSEAD ID on the record (only the INSEAD export has it).
 2. Exact email against any INSEAD email column or the alias table.
-3. A name in the alias table.
+3. A name in the alias table. An alias the table gives to two people matches
+   neither: it is ambiguous, whichever row comes last.
 4. Exact normalised name, or any given name + surname.
 5. Fuzzy name (difflib ratio >= 0.88), only when the surname is identical,
    and only as a candidate for a person to confirm. It never links.
@@ -23,6 +24,7 @@ from __future__ import annotations
 
 import difflib
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 
 from ...core.models import SourceRecord
 from ...core.normalize import name_keys, norm_email, norm_name
@@ -32,16 +34,17 @@ FUZZY_CUTOFF = 0.88
 
 
 class Matcher:
-    def __init__(self, members: list[Member], aliases: dict[str, str] | None = None):
-        """aliases maps an email or a name to an INSEAD ID (the aliases tab).
-        Aliases to IDs not in members are ignored.
+    def __init__(self, members: list[Member], aliases: Mapping[str, str | Iterable[str]] | None = None):
+        """aliases maps an email or a name to an INSEAD ID (the aliases tab), or to
+        several if the tab gives it to several people. That is a conflict, and the
+        alias then matches nobody. Aliases to IDs not in members are ignored.
         """
         self.by_id = {m.insead_id: m for m in members}
         if len(self.by_id) != len(members):
             raise ValueError("duplicate member IDs")
         self.email_index: dict[str, set[str]] = defaultdict(set)
         self.name_index: dict[str, set[str]] = defaultdict(set)
-        self.name_alias: dict[str, str] = {}
+        self.name_alias: dict[str, set[str]] = defaultdict(set)
         for m in members:
             for e in (m.email_preferred, m.email_insead, *m.aliases):
                 e = norm_email(e)
@@ -49,13 +52,14 @@ class Matcher:
                     self.email_index[e].add(m.insead_id)
             for k in name_keys(m.name):
                 self.name_index[k].add(m.insead_id)
-        for alias, i in (aliases or {}).items():
-            if i not in self.by_id:
-                continue
-            if "@" in alias:
-                self.email_index[norm_email(alias)].add(i)
-            elif norm_name(alias):
-                self.name_alias[norm_name(alias)] = i
+        for alias, ids in (aliases or {}).items():
+            for i in {ids} if isinstance(ids, str) else set(ids):
+                if i not in self.by_id:
+                    continue
+                if "@" in alias:
+                    self.email_index[norm_email(alias)].add(i)
+                elif norm_name(alias):
+                    self.name_alias[norm_name(alias)].add(i)
         self._all_names = list(self.name_index)
 
     def match(self, rec: SourceRecord) -> Match:
@@ -77,8 +81,11 @@ class Matcher:
         n = norm_name(name)
         if not n:
             return Match(insead_id=None, method=MatchMethod.NO_NAME)
-        if n in self.name_alias:
-            return Match(insead_id=self.name_alias[n], method=MatchMethod.ALIAS, confidence=1.0)
+        aliased = self.name_alias.get(n)
+        if aliased and len(aliased) > 1:
+            return Match(insead_id=None, method=MatchMethod.ALIAS_AMBIGUOUS, confidence=0.5, candidates=sorted(aliased))
+        if aliased:
+            return Match(insead_id=next(iter(aliased)), method=MatchMethod.ALIAS, confidence=1.0)
         toks = n.split()
         for key in name_keys(name):
             ids = self.name_index.get(key)

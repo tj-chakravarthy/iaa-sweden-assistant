@@ -180,3 +180,22 @@ def test_a_shared_email_and_a_shared_name_are_told_apart():
     assert res.aggregates["match_methods"] == {"email-ambiguous": 1}
     (row,) = [p for p in res.proposals if p.category == "unmatched-alumni-ticket"]
     assert "email that is on several records" in row.reason and "['1', '2']" in row.reason
+
+
+def test_an_alias_given_to_two_people_matches_neither():
+    """The tab used to be read into a dict, so the last row won at full confidence."""
+    pair = [Member(insead_id="1", name="Synthetic One"), Member(insead_id="2", name="Synthetic Two")]
+    # two spellings that are the same name once normalised, in either order
+    for rows in (
+        [("Synthetic Payer", "1"), ("synthetic  payer", "2")],
+        [("synthetic  payer", "2"), ("Synthetic Payer", "1")],
+    ):
+        r = Matcher(pair, dict(rows)).match_name("Synthetic Payer")
+        assert (r.method, r.insead_id, r.candidates) == (MatchMethod.ALIAS_AMBIGUOUS, None, ["1", "2"])
+    assert Matcher(pair, {"synthetic payer": {"1", "2"}}).match_name("Synthetic Payer").insead_id is None
+    # the same person twice is not a conflict, and an ID nobody has does not make one
+    r = Matcher(pair, {"Synthetic Payer": "1", "synthetic payer": {"1", "999"}}).match_name("Synthetic Payer")
+    assert (r.method, r.insead_id) == (MatchMethod.ALIAS, "1")
+    # an address given to two people
+    shared = SourceRecord(source=Source.EVENTBRITE, emails=["shared@example.org"], name="")
+    assert Matcher(pair, {"shared@example.org": {"1", "2"}}).match(shared).method == MatchMethod.EMAIL_AMBIGUOUS

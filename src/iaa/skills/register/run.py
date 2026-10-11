@@ -91,13 +91,13 @@ def _members(run: Run) -> list[Member]:
     return members
 
 
-def _aliases(run: Run) -> dict[str, str]:
-    """aliases tab: alias (or email) column -> INSEAD ID."""
-    out = {}
+def _aliases(run: Run) -> dict[str, set[str]]:
+    """aliases tab: alias (or email) column -> the INSEAD IDs it is given to. More than one is a conflict."""
+    out: dict[str, set[str]] = {}
     for r in run.book.rows("aliases"):
         alias = str(r.get("alias") or r.get("email") or "").strip().lower()
         if alias and str(r.get("insead_id", "")).strip():
-            out[alias] = str(r["insead_id"]).strip()
+            out.setdefault(alias, set()).add(str(r["insead_id"]).strip())
     return out
 
 

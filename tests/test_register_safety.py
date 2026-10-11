@@ -19,7 +19,7 @@ from iaa.skills.register.apply import apply
 from iaa.skills.register.brief import render
 from iaa.skills.register.models import KIND, Member
 from iaa.skills.register.reconcile import reconcile, segment
-from iaa.skills.register.run import _read_sources, propose, refresh
+from iaa.skills.register.run import _aliases, _read_sources, propose, refresh
 from iaa.skills.register.sources import parse_insead_export
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -194,6 +194,26 @@ def test_other_files_in_the_inbox_do_not_block_the_export(fake_book):
     assert [item.kind for item in run.inbox] == ["insead", "unknown", "unknown", "unknown"]
     proposals, brief = propose(run)
     assert proposals and "not recognised and not used: 3" in brief and "suspended" not in brief
+
+
+def test_two_alias_rows_for_one_name_reach_the_matcher_as_a_conflict(fake_book):
+    run = run_context(fake_book)
+    members = [
+        Member(insead_id="1", name="Synthetic One", status="Inactive", member_expire="2015-12-31"),
+        Member(insead_id="2", name="Synthetic Two", status="Inactive", member_expire="2015-12-31"),
+    ]
+    run.book.append("aliases", ["alias", "insead_id"], [["Synthetic Payer", "1"], ["Synthetic Payer", 2]])
+    assert _aliases(run) == {"synthetic payer": {"1", "2"}}
+    payment = SourceRecord(
+        source=Source.PAYMENTS, external_id="row1", name="Synthetic Payer", date=date(2026, 2, 1), status="Swish"
+    )
+    (row,) = [
+        p
+        for p in reconcile("test", members, None, [payment], _aliases(run), as_of=TODAY).proposals
+        if p.field == "payment"
+    ]
+    assert (row.category, row.subject_id) == ("payment-unconfirmed-match", "")
+    assert "aliases tab gives this name to several records" in row.reason and "['1', '2']" in row.reason
 
 
 def test_a_newer_workbook_that_will_not_open_suspends_the_export(fake_book):

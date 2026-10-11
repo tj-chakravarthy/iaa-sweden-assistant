@@ -23,6 +23,7 @@ class MatchMethod(StrEnum):
     NAME_FUZZY = "name-fuzzy"
     AMBIGUOUS = "name-ambiguous"
     EMAIL_AMBIGUOUS = "email-ambiguous"
+    ALIAS_AMBIGUOUS = "alias-ambiguous"
     UNMATCHED = "unmatched"
     NO_NAME = "no-name"
 
@@ -31,7 +32,7 @@ class Match(Model):
     insead_id: str | None
     method: MatchMethod
     confidence: float = 0.0
-    # AMBIGUOUS, EMAIL_AMBIGUOUS: the competing IDs. NAME_FUZZY: the one near-miss.
+    # The ambiguous methods: the competing IDs. NAME_FUZZY: the one near-miss.
     candidates: list[str] = Field(default_factory=list)
 
 

@@ -75,6 +75,10 @@ The `aliases` tab has two columns, `alias` and `insead_id`.
 
 The next run matches them. The assistant never links a near-match on its own.
 
+Give an alias to one person only. If two rows give the same name or email to
+different IDs, it matches neither and the payment or registration comes back
+as a question until one row is removed.
+
 ## New INSEAD export or payments sheet
 
 Drop it in the inbox folder. Any filename, CSV or XLSX. In a workbook the data
