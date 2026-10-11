@@ -1,4 +1,9 @@
-"""Serialised workbook writes with temporary editor protection."""
+"""Serialised workbook writes: a lock tab, a check for edits, one atomic commit.
+
+The lock keeps two runs apart. It does not stop a person editing: an edit made
+during a run is caught by the comparison in commit, and the run writes nothing.
+A lock left by an interrupted run is removed with `iaa unlock`.
+"""
 
 from __future__ import annotations
 
@@ -44,7 +49,6 @@ class Transaction:
         self.staged: dict[str, list[list[Any]]] = {}
         self.original: dict[str, list[list[Any]]] = {}
         self.sheets: dict[str, dict] = {}
-        self.protections: list[int] = []
         self.used: set[int] = set()
         self.uncertain = False
 
@@ -59,11 +63,8 @@ class Transaction:
         metadata = self.book.sh.fetch_sheet_metadata()["sheets"]
         self.sheets = {sheet["properties"]["title"]: sheet["properties"] for sheet in metadata}
         if LOCK_TAB in self.sheets:
-            raise RuntimeError("workbook is locked; finish the other run or follow lock recovery in the runbook")
+            raise RuntimeError("workbook is locked; finish the other run, or see iaa unlock in the runbook")
         self.used = {sheet["properties"]["sheetId"] for sheet in metadata}
-        self.used.update(
-            protection["protectedRangeId"] for sheet in metadata for protection in sheet.get("protectedRanges", [])
-        )
         self.lock_id = self.identifier()
         self.started = datetime.now(UTC).isoformat()
         requests = [
@@ -78,24 +79,6 @@ class Transaction:
             },
             cells_request(self.lock_id, self.marker("locked")),
         ]
-        credentials = getattr(getattr(self.book.sh, "client", None), "auth", None)
-        email = getattr(credentials, "service_account_email", None)
-        for sheet in [*metadata, {"properties": {"sheetId": self.lock_id}}]:
-            protection_id = self.identifier()
-            self.protections.append(protection_id)
-            requests.append(
-                {
-                    "addProtectedRange": {
-                        "protectedRange": {
-                            "protectedRangeId": protection_id,
-                            "range": {"sheetId": sheet["properties"]["sheetId"]},
-                            "description": f"iaa lock {self.token}",
-                            "warningOnly": False,
-                            "editors": {"users": [email] if email else [], "groups": [], "domainUsersCanEdit": False},
-                        }
-                    }
-                }
-            )
         try:
             self.book.sh.batch_update({"requests": requests})
         except Exception:
@@ -177,10 +160,8 @@ class Transaction:
         marker = self.book._raw_values(LOCK_TAB)
         if not marker or marker[0] != ["owner", self.token]:
             raise RuntimeError("workbook lock ownership changed")
-        requests = [{"deleteProtectedRange": {"protectedRangeId": identifier}} for identifier in self.protections]
-        requests.append({"deleteSheet": {"sheetId": self.lock_id}})
         try:
-            self.book.sh.batch_update({"requests": requests})
+            self.book.sh.batch_update({"requests": [{"deleteSheet": {"sheetId": self.lock_id}}]})
         except Exception:
             if self.book._raw_values(LOCK_TAB):
-                raise RuntimeError("workbook lock cleanup failed; follow lock recovery in the runbook") from None
+                raise RuntimeError("workbook lock cleanup failed; see iaa unlock in the runbook") from None

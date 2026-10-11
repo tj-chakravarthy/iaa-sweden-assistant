@@ -1,6 +1,7 @@
 import copy
 
 import pytest
+from typer.testing import CliRunner
 
 from iaa import cli
 from iaa.core.config import Settings
@@ -59,7 +60,7 @@ def test_member_audit_and_decision_share_one_commit(fake_book):
     assert not book.proposals() and len(book.rows("changelog")) == 1
     cli.apply_decisions(run, SKILLS)
     assert len(book.rows("changelog")) == 1
-    assert LOCK_TAB not in fake_book.tabs and not fake_book.protections
+    assert LOCK_TAB not in fake_book.tabs
 
 
 def test_failure_before_commit_preserves_all_data(fake_book, monkeypatch):
@@ -69,7 +70,6 @@ def test_failure_before_commit_preserves_all_data(fake_book, monkeypatch):
     with pytest.raises(RuntimeError, match="synthetic failure"):
         cli.apply_decisions(run, SKILLS)
     assert {name: tab.cells for name, tab in fake_book.tabs.items()} == before
-    assert not fake_book.protections
 
 
 def test_lost_success_response_is_recovered_without_replaying(fake_book, monkeypatch):
@@ -101,7 +101,7 @@ def test_uncertain_write_keeps_lock_for_recovery(fake_book, monkeypatch):
     monkeypatch.setattr(fake_book, "batch_update", timeout)
     with pytest.raises(TimeoutError):
         cli.apply_decisions(run, SKILLS)
-    assert LOCK_TAB in fake_book.tabs and fake_book.protections
+    assert LOCK_TAB in fake_book.tabs
     assert book.read("members", Member)[0].status == "Active"
     assert not book.rows("changelog") and book.proposals()
     with pytest.raises(RuntimeError, match="locked"):
@@ -117,26 +117,49 @@ def test_writers_are_serialised(fake_book):
                 pytest.fail("second writer entered")
 
 
-def test_editor_protection_covers_existing_tabs_before_reads(fake_book):
+def test_the_lock_adds_one_tab_and_no_protection(fake_book):
     book, _ = setup(fake_book)
+    fake_book.batches.clear()
     with book.transaction():
-        protected_ids = {protection["range"]["sheetId"] for protection in fake_book.protections.values()}
-        assert {fake_book.tabs[name].id for name in ("members", "proposals")} <= protected_ids
-        assert all(
-            not protection["warningOnly"] and not protection["editors"]["domainUsersCanEdit"]
-            for protection in fake_book.protections.values()
-        )
-    assert not fake_book.protections
+        assert set(fake_book.tabs) == {"members", "proposals", LOCK_TAB}
+        assert book.lock()["state"] == "locked"
+    kinds = {next(iter(request)) for body in fake_book.batches for request in body["requests"]}
+    assert kinds == {"addSheet", "updateCells", "deleteSheet"}
+    assert not book.lock()
 
 
-def test_owner_override_is_detected_before_commit(fake_book):
+def test_an_edit_during_the_run_is_detected_before_commit(fake_book):
     book, _ = setup(fake_book)
     with pytest.raises(RuntimeError, match="changed"):
         with book.transaction():
             book.proposals()
             book.write_proposals([])
-            fake_book.tabs["proposals"].cells[1][-2] = "owner changed decision"
+            fake_book.tabs["proposals"].cells[1][-2] = "someone changed a decision"
     assert book.proposals() and LOCK_TAB not in fake_book.tabs
+
+
+def test_unlock_shows_the_lock_and_removes_it_only_when_told(fake_book, monkeypatch):
+    book, run = setup(fake_book)
+    original = fake_book.batch_update
+
+    def timeout(body):
+        if data_commit(body):
+            raise TimeoutError("synthetic timeout")
+        return original(body)
+
+    monkeypatch.setattr(fake_book, "batch_update", timeout)
+    with pytest.raises(TimeoutError):
+        cli.apply_decisions(run, SKILLS)
+    monkeypatch.setattr(fake_book, "batch_update", original)
+    monkeypatch.setattr(cli, "_open", lambda dry_run=False: run)
+    shown = CliRunner().invoke(cli.app, ["unlock"])
+    assert shown.exit_code == 0 and "lock locked" in shown.output and "did not confirm" in shown.output
+    assert LOCK_TAB in fake_book.tabs
+    removed = CliRunner().invoke(cli.app, ["unlock", "--yes"])
+    assert removed.exit_code == 0 and "lock removed" in removed.output and LOCK_TAB not in fake_book.tabs
+    assert "no lock" in CliRunner().invoke(cli.app, ["unlock"]).output
+    cli.apply_decisions(run, SKILLS)  # the interrupted decision is carried out once
+    assert len(book.rows("changelog")) == 1 and not book.proposals()
 
 
 def test_read_only_transactions_are_refused(fake_book):

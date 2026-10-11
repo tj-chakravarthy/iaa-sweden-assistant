@@ -113,7 +113,6 @@ class FakeBook:
 
     def __init__(self):
         self.tabs = {}
-        self.protections = {}
         self.batches = []
         self.next_id = 1
 
@@ -139,9 +138,6 @@ class FakeBook:
                         "sheetId": tab.id,
                         "gridProperties": {"rowCount": tab.row_count, "columnCount": tab.col_count},
                     },
-                    "protectedRanges": [
-                        value for value in self.protections.values() if value["range"]["sheetId"] == tab.id
-                    ],
                 }
                 for name, tab in self.tabs.items()
             ]
@@ -161,11 +157,6 @@ class FakeBook:
                     properties["gridProperties"]["columnCount"],
                 )
                 tab.id = properties["sheetId"]
-            elif "addProtectedRange" in request:
-                protected = request["addProtectedRange"]["protectedRange"]
-                staged.protections[protected["protectedRangeId"]] = protected
-            elif "deleteProtectedRange" in request:
-                del staged.protections[request["deleteProtectedRange"]["protectedRangeId"]]
             elif "deleteSheet" in request:
                 name = next(name for name, tab in staged.tabs.items() if tab.id == request["deleteSheet"]["sheetId"])
                 del staged.tabs[name]
@@ -184,7 +175,7 @@ class FakeBook:
                 assert all(len(row) <= tab.col_count for row in tab.cells)
             else:
                 raise AssertionError("unsupported request")
-        self.tabs, self.protections, self.batches = staged.tabs, staged.protections, staged.batches
+        self.tabs, self.batches = staged.tabs, staged.batches
         self.next_id = staged.next_id
         return {}
 

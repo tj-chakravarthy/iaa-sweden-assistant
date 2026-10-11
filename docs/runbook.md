@@ -31,30 +31,27 @@
   by a fresh reconciliation.
 - Existing changes require the current field value to match `old`. Fill in
   `old` when adding a proposal by hand. A conflict stays open for review.
-- While writing, the assistant creates `_iaa_write_lock` and temporarily
-  protects existing tabs from other editors. Other assistant runs refuse the
-  lock. The spreadsheet owner can override Google's protections and must not
-  edit or remove protections during a run. A final comparison detects earlier
-  owner edits, but cannot guarantee detection of an edit racing the commit.
+- While writing, the assistant adds a tab called `_iaa_write_lock`. A second
+  run refuses to start while it is there. The tab does not stop anyone
+  editing. If a tab the run has read is edited before it commits, the run
+  writes nothing and says so. An edit made in the same instant as the commit
+  can still be overwritten, so avoid editing while a run is going.
 - Members, decisions and their changelog entries commit together. A lost
   response is checked against the transaction marker before any retry.
 
 ## Recovering a write lock
 
-A killed run or uncertain network failure can leave `_iaa_write_lock` and
-temporary protections in place. Locks are never expired automatically.
+A killed run or an uncertain network failure can leave `_iaa_write_lock`
+behind. It is never removed automatically.
 
-1. Stop every local or workflow writer and confirm none is still running.
-   If a request may still be running on Google's side, wait for it to settle.
-2. Inspect the lock tab. `committed` means the entire staged update reached
-   Sheets. `locked` means completion was not confirmed; inspect the members,
-   proposals and changelog before proceeding. Do not manually replay changes.
-3. As the spreadsheet owner, remove only protected ranges whose description
-   is `iaa lock` followed by that lock's owner token. Leave other protections.
-4. Delete `_iaa_write_lock` and run the command again. Successfully committed
-   decisions have already left proposals and will not be applied again.
+1. Check that no local run or workflow is still going.
+2. Run `uv run iaa unlock`. It shows the lock. `committed` means that run's
+   whole update was written. `locked` means it was not confirmed: look at
+   members, proposals and changelog first. Do not redo changes by hand.
+3. Run `uv run iaa unlock --yes` to remove it, then run the command again.
+   Decisions that were written have left proposals and are not applied twice.
 
-Do not clear a lock while a writer might still commit.
+Do not remove a lock while a run might still commit.
 
 ## Telling the assistant who someone is
 

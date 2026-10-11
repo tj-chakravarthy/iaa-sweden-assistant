@@ -54,9 +54,8 @@ and all five required spreadsheet checks must actually pass. Skipped or
 unselected checks cannot make the dedicated integration job green. The inbox
 check remains optional when its folder setting is absent.
 
-The command tests atomic updates and temporary protections on the dev sheet.
-After a killed run, follow the write-lock recovery steps in the runbook before
-retrying. Do not run the destructive live tests while another writer is active.
+The command tests atomic updates and the write lock on the dev sheet. After a
+killed run, remove the lock with `uv run iaa unlock --yes` before retrying. Do not run the destructive live tests while another writer is active.
 
 ## Try the commands by hand
 

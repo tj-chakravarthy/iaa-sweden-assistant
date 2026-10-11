@@ -34,7 +34,7 @@ from pydantic import BaseModel
 
 from ..models import Proposal
 from ..policy import assert_known_kind, assert_minimised
-from .transaction import Transaction
+from .transaction import LOCK_TAB, Transaction
 
 PROPOSAL_COLS = list(Proposal.model_fields)
 
@@ -80,6 +80,18 @@ class Workbook:
         finally:
             self._transaction = None
             transaction.release()
+
+    def lock(self) -> dict[str, str]:
+        """The write lock as owner, state and started. {} if there is none."""
+        return {str(row[0]): str(row[1]) for row in self._raw_values(LOCK_TAB) if len(row) > 1}
+
+    def unlock(self) -> None:
+        """Remove a lock left by an interrupted run. Only when no run is in progress."""
+        if self.read_only:
+            raise RuntimeError("dry run: refusing to remove the lock")
+        for sheet in self.sh.fetch_sheet_metadata()["sheets"]:
+            if sheet["properties"]["title"] == LOCK_TAB:
+                self.sh.batch_update({"requests": [{"deleteSheet": {"sheetId": sheet["properties"]["sheetId"]}}]})
 
     @classmethod
     def open(cls, sheet_id: str, read_only: bool = False) -> Workbook:

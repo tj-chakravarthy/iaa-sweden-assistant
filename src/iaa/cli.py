@@ -4,6 +4,7 @@
     iaa <skill> apply                carry out decided proposals
     iaa <skill> selftest             run on synthetic fixtures, no credentials
     iaa run-all                      every skill: apply, then propose
+    iaa unlock [--yes]               show, or remove, a lock left by an interrupted run
 
 For the register the verb is reconcile.
 
@@ -152,6 +153,26 @@ def _commands(skill: Skill) -> typer.Typer:
 
 for _skill in SKILLS:
     app.add_typer(_commands(_skill), name=_skill.name)
+
+
+@app.command()
+def unlock(yes: bool = typer.Option(False, "--yes", help="Remove the lock")):
+    """Show the write lock an interrupted run left behind. Remove it with --yes."""
+    book = _open().book
+    lock = book.lock()
+    if not lock:
+        typer.echo("no lock")
+        return
+    typer.echo(f"lock {lock.get('state', '?')}, started {lock.get('started', '?')}")
+    if lock.get("state") == "committed":
+        typer.echo("that run's changes were written")
+    else:
+        typer.echo("that run did not confirm its write: check members, proposals and changelog")
+    if not yes:
+        typer.echo("if no run is in progress, remove it with: iaa unlock --yes")
+        return
+    book.unlock()
+    typer.echo("lock removed")
 
 
 @app.command("run-all")

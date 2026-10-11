@@ -41,8 +41,8 @@ inbox (Drive), Eventbrite, Mailchimp
   as a candidate.
 - A proposal is not raised twice.
 - Applied decisions, member updates and their audit entries commit together.
-  Write runs lock the workbook temporarily; see the runbook for owner access
-  and interrupted-run recovery.
+  A run locks out other runs while it writes. `iaa unlock` clears a lock left
+  by an interrupted run; see the runbook.
 - Monthly run plus a daily dry run. Both are manual until the dev register
   test passes.
 
@@ -53,7 +53,7 @@ inbox (Drive), Eventbrite, Mailchimp
 | `src/iaa/core/` | Shared by all skills: proposals, approval, policy, connectors |
 | `src/iaa/skills/register/` | The member register |
 | `src/iaa/registry.py` | The list of skills |
-| `src/iaa/cli.py` | Commands, the same for every skill |
+| `src/iaa/cli.py` | Commands, the same for every skill, plus `run-all` and `unlock` |
 | `docs/` | Skill pages, runbook, data boundary, migration, roadmap |
 
 ## Adding a skill
