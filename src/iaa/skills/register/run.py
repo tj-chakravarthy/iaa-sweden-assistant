@@ -102,6 +102,7 @@ def _aliases(run: Run) -> dict[str, str]:
 def propose(run: Run) -> tuple[list[Proposal], str]:
     box = _sources(run)
     res = reconcile(run.run_id, _members(run), box.export, box.records, _aliases(run), run.known(), run.today)
+    run.memo["register.live"] = res.live  # for refresh, which runs after this
     unavailable = False
     try:
         llm = run.llm
@@ -118,9 +119,20 @@ def propose(run: Run) -> tuple[list[Proposal], str]:
     return res.proposals, brief
 
 
+def _out_of_date(proposal: Proposal, live: dict[str, set[str]]) -> bool:
+    """An open row this run has replaced. A decision waiting to be applied is kept."""
+    return (
+        proposal.kind == KIND
+        and proposal.category in live
+        and key_of(proposal) not in live[proposal.category]
+        and (not proposal.approve.strip() or bool(proposal.note))
+    )
+
+
 def refresh(run: Run, proposals: list[Proposal]) -> list[Proposal]:
     from .reconcile import NO_CONTACT
 
+    live = run.memo.get("register.live", {})  # only set once this run has reconciled
     protected = {member.insead_id for member in _members(run) if member.do_not_contact}
     return [
         proposal.model_copy(update={"suggested_action": NO_CONTACT})
@@ -129,6 +141,7 @@ def refresh(run: Run, proposals: list[Proposal]) -> list[Proposal]:
         and proposal.suggested_action in {"Renewal reminder", "Membership ask"}
         else proposal
         for proposal in proposals
+        if not _out_of_date(proposal, live)
     ]
 
 

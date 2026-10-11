@@ -61,11 +61,14 @@ class Proposer:
         self.proposals: list[Proposal] = []
         self._seen = set(known)
 
-    def __call__(self, **fields: Any) -> None:
+    def __call__(self, **fields: Any) -> str:
+        """Returns the proposal's key, raised or not."""
         p = Proposal(run_id=self.run_id, kind=self.kind, **fields)
-        if key_of(p) not in self._seen:
-            self._seen.add(key_of(p))
+        key = key_of(p)
+        if key not in self._seen:
+            self._seen.add(key)
             self.proposals.append(p)
+        return key
 
 
 def decide(proposals: list[Proposal], handlers: Mapping[str, Handler]) -> tuple[list[Proposal], list[list]]:

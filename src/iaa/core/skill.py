@@ -106,4 +106,5 @@ class Skill:
     applier: Callable[[Run], Applier]
     # run on synthetic fixtures, no network: (passed, lines to print)
     selftest: Callable[[], tuple[bool, list[str]]]
+    # Rewrite or drop open proposals. Called before deciding, and after this skill has proposed.
     refresh: Callable[[Run, list[Proposal]], list[Proposal]] = lambda run, proposals: proposals

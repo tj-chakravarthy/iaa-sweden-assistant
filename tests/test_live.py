@@ -105,7 +105,7 @@ def test_three_months_on_a_real_sheet(book):
     out = run("run-all")
     assert_counts_only(out, book)
     proposals = book.proposals()
-    assert Counter(p.category for p in proposals)["new-record"] == 30 and len(proposals) == 72
+    assert Counter(p.category for p in proposals)["new-record"] == 30 and len(proposals) == 36
     assert "members" not in tab_names(book)
     assert sorted(r["kind"] for r in book.rows("runs")) == ["eventbrite", "insead", "payments", "unknown"]
 
@@ -113,29 +113,42 @@ def test_three_months_on_a_real_sheet(book):
     answers = [["no" if p.category == "payment-not-in-INSEAD" else "Yes"] for p in proposals]
     typed(book, "proposals", rowcol_to_a1(2, PROPOSAL_COLS.index("approve") + 1), answers)
 
-    # month 2: carried out and logged. the same inbox raises nothing new
+    # month 2: carried out and logged. derived values for all members come as one row
     out = run("run-all")
     assert_counts_only(out, book)
-    assert "applied 68, acknowledged 3, rejected 1" in out and "new proposals: 0" in out
+    assert "applied 32, acknowledged 3, rejected 1" in out and "new proposals: 1" in out
     from iaa.skills.register.apply import apply
 
-    expected_members, remaining, _ = apply(
+    loaded, remaining, _ = apply(
         [],
         [proposal.model_copy(update={"approve": answers[index][0]}) for index, proposal in enumerate(proposals)],
         book.export,
     )
     assert not remaining
+    assert {m.insead_id: m.model_dump() for m in book.read("members", Member)} == {
+        member.insead_id: member.model_dump() for member in loaded
+    }
+    assert set(book.rows("changelog")[0]) == set(CHANGELOG_COLS)
+    (derived,) = book.proposals()
+    assert derived.category == "derived-update" and derived.subject == "30 members"
+
+    # the owner types one yes. month 3 applies it
+    typed(book, "proposals", rowcol_to_a1(2, PROPOSAL_COLS.index("approve") + 1), [["yes"]])
+    out = run("run-all")
+    assert_counts_only(out, book)
+    assert "applied 1, acknowledged 0, rejected 0" in out and "new proposals: 0" in out
+    expected_members, remaining, _ = apply(loaded, [derived.model_copy(update={"approve": "yes"})])
+    assert not remaining
     expected = {member.insead_id: member.model_dump() for member in expected_members}
     assert {m.insead_id: m.model_dump() for m in book.read("members", Member)} == expected
-    assert Counter(r["outcome"] for r in book.rows("changelog")) == {"applied": 68, "acknowledged": 3, "rejected": 1}
-    assert set(book.rows("changelog")[0]) == set(CHANGELOG_COLS)
+    assert Counter(r["outcome"] for r in book.rows("changelog")) == {"applied": 33, "acknowledged": 3, "rejected": 1}
     assert book.proposals() == []
 
-    # month 3: nothing decided, nothing changes
+    # month 4: nothing decided, nothing changes
     out = run("run-all")
     assert "applied 0, acknowledged 0, rejected 0" in out and "new proposals: 0" in out
     assert {m.insead_id: m.model_dump() for m in book.read("members", Member)} == expected
-    assert len(book.rows("changelog")) == 72
+    assert len(book.rows("changelog")) == 37
 
 
 def test_values_come_back_as_they_were_written(book):
@@ -190,7 +203,7 @@ def test_rows_are_added_below_a_gap(book):
 def test_a_dry_run_leaves_no_trace(book):
     before = tab_names(book)
     out = run("register", "reconcile", "--dry-run")
-    assert "new proposals: 72" in out and "dry run, nothing written" in out
+    assert "new proposals: 36" in out and "dry run, nothing written" in out
     assert_counts_only(out, book)
     assert tab_names(book) == before
 

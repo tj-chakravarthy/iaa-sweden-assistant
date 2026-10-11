@@ -17,6 +17,7 @@
 | You write | Next run | In `changelog` |
 |---|---|---|
 | `yes` on a change to a member | the `members` tab is changed, the row leaves `proposals` | `applied` |
+| `yes` on a `derived-update` row | segments, event counts and payment years are updated for every member the row lists, the row leaves `proposals` | `applied` |
 | `yes` on a payment item or an unmatched registrant | nothing in `members` changes, the row leaves `proposals` | `acknowledged` |
 | `no` | nothing changes, the row leaves `proposals` | `rejected` |
 | nothing | the row stays | |
@@ -29,6 +30,11 @@
   snapshot before approving. The export must still match it when applied.
   Older proposals containing only `new record` must be rejected and replaced
   by a fresh reconciliation.
+- Segments, event counts and payment years follow from the sources, so they
+  come as one `derived-update` row per run, not one per member. Its `reason`
+  says how many members and which values. The `new` cell lists each change as
+  `[old, new]`. One `yes` applies all of it. If a newer run has different
+  values, it replaces a row nobody has decided on.
 - Existing changes require the current field value to match `old`. Fill in
   `old` when adding a proposal by hand. A conflict stays open for review.
 - While writing, the assistant adds a tab called `_iaa_write_lock`. A second

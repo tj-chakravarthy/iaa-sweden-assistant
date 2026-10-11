@@ -5,10 +5,15 @@ numbers. This is the October 2026 manual run, restructured.
 
 known (core.proposals) stops a run from raising what is already open or
 answered.
+
+Derived values (segment, event counts, payment years) change for many members
+at once. They go in one row per run, not one per member, so the rows that need
+a person's judgement stay readable.
 """
 
 from __future__ import annotations
 
+import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -18,7 +23,7 @@ from ...core.models import Proposal, Source, SourceRecord
 from ...core.normalize import parse_date
 from ...core.policy import assert_minimised
 from ...core.proposals import Proposer
-from .apply import value_text
+from .apply import DERIVED, value_text
 from .match import Matcher
 from .models import HOME_NAA, KIND, Match, MatchMethod, Member
 from .sources.eventbrite import attendee_key, event_key
@@ -55,6 +60,8 @@ REGISTER_OWNED = (
     "do_not_contact",
 )
 NO_CONTACT = "None: marked do-not-contact"
+DERIVED_UPDATE = "derived-update"  # category of the row that carries derived values
+CELL_LIMIT = 40_000  # a Sheets cell holds 50,000 characters
 
 
 @dataclass
@@ -62,6 +69,9 @@ class ReconcileResult:
     proposals: list[Proposal]
     matches: list[tuple[SourceRecord, Match]]
     aggregates: dict = field(default_factory=dict)
+    # category -> keys of the rows this run stands by. An open row of that
+    # category with another key is out of date.
+    live: dict[str, set[str]] = field(default_factory=dict)
 
 
 def segment(m: Member, engaged: bool, as_of: Date | None = None) -> str:
@@ -102,6 +112,31 @@ def _basis(current: list[Member], new_export: list[Member] | None) -> list[Membe
             n = n.model_copy(update=keep)
         out.append(n)
     return out
+
+
+def _derived_rows(derived: dict[str, dict[str, list[str]]]) -> list[dict]:
+    """Derived changes as proposal fields, split so each fits in a cell."""
+    chunks: list[dict] = [{}]
+    for insead_id in sorted(derived):
+        if chunks[-1] and len(json.dumps(chunks[-1] | {insead_id: derived[insead_id]})) > CELL_LIMIT:
+            chunks.append({})
+        chunks[-1][insead_id] = derived[insead_id]
+    rows = []
+    for chunk in filter(None, chunks):
+        fields = Counter(name for changes in chunk.values() for name in changes)
+        rows.append(
+            dict(
+                subject=f"{len(chunk)} members",
+                field=DERIVED,
+                new=json.dumps(chunk, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+                reason="from membership and matched records: "
+                + ", ".join(f"{name} {count}" for name, count in sorted(fields.items())),
+                source="register",
+                category=DERIVED_UPDATE,
+                suggested_action="Accept",
+            )
+        )
+    return rows
 
 
 def _covered_until(r: SourceRecord) -> Date | None:
@@ -298,8 +333,10 @@ def reconcile(
                 suggested_action="Add alias or mark non-alumnus",
             )
 
-    # 3. engaged non-members
+    # 3. engaged non-members, learned emails, derived values
+    derived: dict[str, dict[str, list[str]]] = {}
     for m in base:
+        changes: dict[str, list[str]] = {}
         if m.insead_id in engaged and m.status != "Active" and m.segment != "engaged-non-member":
             propose(
                 subject_id=m.insead_id,
@@ -314,37 +351,35 @@ def reconcile(
             )
         target_segment = segment(m, m.insead_id in engaged, as_of)
         if target_segment != "engaged-non-member" and m.segment != target_segment:
-            propose(
-                subject_id=m.insead_id,
-                subject=m.name,
-                field="segment",
-                old=m.segment,
-                new=target_segment,
-                reason="current membership and engagement",
-                source="register",
-                category="segment-update",
-                suggested_action="Accept",
-            )
+            changes["segment"] = [m.segment, target_segment]
         for name, value in metrics[m.insead_id].items():
             if name.startswith("events_") and not unique_events:
                 continue
             target = value_text(sorted(value) if isinstance(value, set) else value)
             previous = value_text(getattr(m, name))
-            if previous != target:
-                propose(
-                    subject_id=m.insead_id,
-                    subject=m.name,
-                    field=name,
-                    old=previous,
-                    new=target,
-                    reason="matched source records",
-                    source="register",
-                    category="activity-update",
-                    suggested_action="Accept",
-                )
+            if previous == target:
+                continue
+            if name != "aliases":
+                changes[name] = [previous, target]
+                continue
+            # an address ties a person to a record, so it keeps a row of its own
+            propose(
+                subject_id=m.insead_id,
+                subject=m.name,
+                field=name,
+                old=previous,
+                new=target,
+                reason="matched source records",
+                source="register",
+                category="alias-update",
+                suggested_action="Accept",
+            )
+        if changes and m.insead_id in by_id:  # members not in the register yet get theirs once added
+            derived[m.insead_id] = changes
+    live = {DERIVED_UPDATE: {propose(**row) for row in _derived_rows(derived)}}
 
     agg = aggregates(base, matches, engaged, propose.proposals, as_of)
-    return ReconcileResult(proposals=propose.proposals, matches=matches, aggregates=agg)
+    return ReconcileResult(proposals=propose.proposals, matches=matches, aggregates=agg, live=live)
 
 
 def aggregates(

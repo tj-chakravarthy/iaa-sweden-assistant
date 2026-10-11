@@ -8,10 +8,15 @@ approval and calls carry_out for each "yes". Outcomes:
                 an alias the owner adds by hand)
 - ""            unknown member, record not in the export, or a value of the
                 wrong type. The proposal stays open with the reason.
+
+Derived values (segment, event counts, payment years) come as one row for many
+members. Its new cell is JSON: {id: {field: [old, new]}}. All of it applies or
+none of it.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from pydantic import ValidationError
@@ -23,6 +28,8 @@ from .models import KIND, Member
 
 DATE_FIELDS = ("member_start", "member_expire")  # stored as YYYY-MM-DD
 INFORMATIONAL = {"payment", "alias", "record"}
+DERIVED = "derived"  # the field of a row that carries derived values for many members
+DERIVED_FIELDS = ("segment", "paid_direct_years", "events_registered", "events_attended", "events_no_show")
 
 
 def value_text(value: object) -> str:
@@ -33,10 +40,44 @@ def value_text(value: object) -> str:
     return str(value)
 
 
+def _carry_out_derived(p: Proposal, by_id: dict[str, Member]) -> tuple[str, str]:
+    try:
+        changes = json.loads(p.new)
+        pairs = [pair for fields in changes.values() for pair in fields.values()]
+        well_formed = all(set(fields) <= set(DERIVED_FIELDS) for fields in changes.values()) and all(
+            isinstance(pair, list) and len(pair) == 2 and all(isinstance(text, str) for text in pair) for pair in pairs
+        )
+    except (ValueError, AttributeError):
+        well_formed = False
+    if not well_formed:
+        return "", "not a derived-values row; reject it and reconcile again"
+    updated = {}
+    for insead_id, fields in changes.items():
+        m = by_id.get(insead_id)
+        if m is None:
+            return "", "a member in this row is not in the register"
+        values = {}
+        for name, (old, new) in fields.items():
+            if value_text(getattr(m, name)) not in (old, new):
+                return "", "values changed since this row was raised; the next reconcile replaces it"
+            is_list = isinstance(getattr(m, name), list)
+            values[name] = [item for item in new.split(";") if item] if is_list else new
+        try:
+            updated[insead_id] = Member.model_validate(m.model_dump() | values)
+        except ValidationError:
+            return "", "not valid derived values"
+    if all(by_id[insead_id] == member for insead_id, member in updated.items()):
+        return "acknowledged", ""
+    by_id.update(updated)
+    return "applied", ""
+
+
 def carry_out(
     p: Proposal, by_id: dict[str, Member], export_by_id: dict[str, Member], as_of: date | None = None
 ) -> tuple[str, str]:
     """Returns (outcome, why not). outcome is "" if it could not be done."""
+    if p.field == DERIVED:
+        return _carry_out_derived(p, by_id)
     if p.category == "new-record":
         try:
             snapshot = Member.model_validate_json(p.new)

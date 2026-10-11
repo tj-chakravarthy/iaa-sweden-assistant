@@ -16,10 +16,12 @@ export must still match that snapshot when approval is applied. Existing
 field changes require the current value to match `old`; conflicts stay open.
 
 All exported profile fields are reconciled. Exported and learned email
-aliases are merged with existing aliases. Matched payments propose payment
-years. Event records propose registration, check-in and no-show counts, and
-all segments are maintained through proposals. A no-show needs a past event,
-an unchecked ticket and evidence that check-in was used for that event.
+aliases are merged with existing aliases, one row per member.
+
+Payment years, event counts (registered, checked in, no-show) and segments
+follow from the sources. They are proposed for all members in one
+`derived-update` row per run, which one "yes" applies. A no-show needs a past
+event, an unchecked ticket and evidence that check-in was used for that event.
 Counts cover the event records available in the inbox and API, rather than a
 fixed reporting window. Removing files can lower proposed counts.
 
