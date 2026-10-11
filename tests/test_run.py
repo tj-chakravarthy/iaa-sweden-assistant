@@ -199,6 +199,10 @@ def test_a_yes_on_a_change_the_export_has_dropped_is_not_applied(book):
     assert first_member(book).company == "Example AB"
     (row,) = rows_of(book, "profile-update")  # the stale row is gone, a fresh one asks about Third AB
     assert (row["new"], row["approve"], row["note"]) == ("Third AB", "", "")
+    (logged,) = outcomes(book, "superseded")  # the yes that was not carried out is on record
+    assert logged[CHANGELOG_COLS.index("new")] == "Other AB" and len(outcomes(book, "applied")) == 33
+    run("run-all")
+    assert len(outcomes(book, "superseded")) == 1
 
 
 def outcomes(book, outcome):

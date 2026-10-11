@@ -3,7 +3,14 @@
 from datetime import date
 
 from iaa.core.models import Proposal, Source, SourceRecord
-from iaa.core.proposals import CHANGELOG_COLS, key_of, known_keys, reopened_rows, settled_rows
+from iaa.core.proposals import (
+    CHANGELOG_COLS,
+    key_of,
+    known_keys,
+    reopened_rows,
+    settled_rows,
+    superseded_rows,
+)
 from iaa.skills.register.apply import DERIVED, apply
 from iaa.skills.register.models import KIND, Member
 from iaa.skills.register.reconcile import reconcile
@@ -103,6 +110,17 @@ def test_the_membership_ask_waits_until_register_and_export_both_say_not_a_membe
     assert raised("Inactive", "Inactive") == {"engaged-non-member"}
     assert raised("Inactive", "Active") == {"reactivated"}  # renewed: the renewal is the question
     assert "engaged-non-member" not in raised("Active", "Inactive")  # a lapse nobody has accepted yet
+
+
+def test_a_yes_a_skill_withdraws_is_logged_and_may_be_asked_again():
+    pending, _ = changed("company", member(), member(company="Outdated"))
+    undecided = pending.model_copy(update={"field": "city", "new": "Elsewhere"})
+    adjusted = pending.model_copy(update={"field": "country", "suggested_action": "changed by the skill"})
+    before = [yes(pending), undecided, yes(adjusted.model_copy(update={"suggested_action": "Accept"}))]
+    (row,) = superseded_rows(before, [yes(adjusted)], "r2")
+    assert (row[1], row[-1], row[CHANGELOG_COLS.index("new")]) == ("r2", "superseded", "Outdated")
+    assert len(row) == len(CHANGELOG_COLS)
+    assert key_of(pending) not in known_keys([], [dict(zip(CHANGELOG_COLS, row, strict=True))])
 
 
 def log_row(item, outcome, run_id="r"):

@@ -9,9 +9,13 @@ the skill to carry it out, and the changelog records the outcome:
 
 A "yes" that cannot be carried out stays open with the reason in note.
 
-A fourth outcome, reopened, is written by a run that finds the question behind
-a rejected or acknowledged row has gone away. From then on the answer no longer
-stands, so if the question comes back it is asked again.
+Two more outcomes are written by a run, not by an answer:
+
+- reopened    the question behind a rejected or acknowledged row has gone away.
+              The answer no longer stands, so if the question comes back it is
+              asked again.
+- superseded  a skill took a row with a "yes" off the tab before it could be
+              carried out, because its source has moved on. Nothing was changed.
 
 Sources are read again on every run. To avoid asking twice, each proposal
 has a key (kind, subject, field, old, new). A key that is open, rejected or
@@ -34,6 +38,7 @@ KEY_FIELDS = ("kind", "subject_id", "subject", "field", "old", "new")
 CHANGELOG_COLS = ["applied_at", "run_id", *KEY_FIELDS, "reason", "source", "category", "outcome"]
 SETTLED = ("acknowledged", "rejected")  # outcomes after which the same proposal is not raised again
 REOPENED = "reopened"  # undoes that: the question went away, so the answer no longer stands
+SUPERSEDED = "superseded"  # a yes that was never carried out: the skill withdrew the row
 
 # Carries out one approved proposal. Returns (outcome, why not).
 # outcome is "applied", "acknowledged", or "" if it could not be done.
@@ -74,6 +79,17 @@ def reopened_rows(changelog: Iterable[Mapping[str, Any]], keys: Iterable[str], r
         [now, run_id, *(str(settled[key].get(c, "")) for c in CHANGELOG_COLS[2:-1]), REOPENED]
         for key in sorted(keys)
         if key in settled
+    ]
+
+
+def superseded_rows(before: list[Proposal], after: list[Proposal], run_id: str) -> list[list]:
+    """Changelog rows for the approved proposals in before that are no longer in after."""
+    kept = {key_of(p) for p in after}
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    return [
+        [now, run_id, *(getattr(p, c) for c in CHANGELOG_COLS[2:-1]), SUPERSEDED]
+        for p in before
+        if approved(p) and key_of(p) not in kept
     ]
 
 

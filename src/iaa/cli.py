@@ -24,7 +24,8 @@ import typer
 
 from .core import policy
 from .core.config import load_env, settings
-from .core.proposals import CHANGELOG_COLS, decide, reopened_rows, summary
+from .core.models import Proposal
+from .core.proposals import CHANGELOG_COLS, decide, reopened_rows, summary, superseded_rows
 from .core.skill import RUN_COLS, Run, Skill
 from .registry import SKILLS
 
@@ -66,12 +67,18 @@ def apply_decisions(run: Run, skills: Sequence[Skill]) -> None:
     typer.echo(result)
 
 
+def _refresh(run: Run, skills: Sequence[Skill], proposals: list[Proposal]) -> tuple[list[Proposal], list[list]]:
+    """Let each skill adjust or withdraw open rows. A withdrawn row that had a yes gets a changelog row."""
+    refreshed = proposals
+    for skill in skills:
+        refreshed = skill.refresh(run, refreshed)
+    return refreshed, superseded_rows(proposals, refreshed, run.run_id)
+
+
 def _apply_decisions(run: Run, skills: Sequence[Skill]) -> str:
     book = run.book
     snapshot = book.proposals()
-    refreshed = snapshot
-    for skill in skills:
-        refreshed = skill.refresh(run, refreshed)
+    refreshed, dropped = _refresh(run, skills, snapshot)
     decided = {p.kind for p in refreshed if policy.approved(p)}
     appliers = {s.name: s.applier(run) for s in skills if s.kinds & decided}
     handlers = {
@@ -87,9 +94,8 @@ def _apply_decisions(run: Run, skills: Sequence[Skill]) -> str:
         for s in skills:
             if s.kinds & applied:
                 appliers[s.name].commit()
-        for skill in skills:
-            remaining = skill.refresh(run, remaining)
-        book.append("changelog", CHANGELOG_COLS, log)
+        remaining, dropped_after = _refresh(run, skills, remaining)
+        book.append("changelog", CHANGELOG_COLS, dropped + log + dropped_after)
         book.write_proposals(remaining)
     return (
         f"applied {outcomes['applied']}, acknowledged {outcomes['acknowledged']}, rejected {outcomes['rejected']}; "
@@ -112,14 +118,14 @@ def _raise_proposals(run: Run, skills: Sequence[Skill], details: bool) -> None:
             typer.echo(brief)
         elif not run.dry_run:
             existing = run.book.proposals()
-            refreshed = s.refresh(run, existing)
+            refreshed, superseded = _refresh(run, [s], existing)
             if refreshed != existing:
                 run.book.write_proposals(refreshed)
             run.book.append_proposals(proposals)
             waiting = len(refreshed) + len(proposals)
             reopened = reopened_rows(run.book.rows("changelog"), s.withdrawn(run), run.run_id)
-            if reopened:
-                run.book.append("changelog", CHANGELOG_COLS, reopened)
+            if superseded or reopened:
+                run.book.append("changelog", CHANGELOG_COLS, superseded + reopened)
             if brief:
                 run.book.write_text(f"brief_{s.name}_{run.today:%Y-%m}", brief)
         typer.echo(f"{s.name}, run {run.run_id}" + (" (dry run, nothing written)" if run.dry_run else ""))
