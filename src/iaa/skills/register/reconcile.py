@@ -351,7 +351,10 @@ def reconcile(
         # The status the register has accepted. A lapse from the export that is
         # rejected, or not decided yet, must not show up as a stored segment.
         accepted = by_id.get(m.insead_id, m)
-        if m.insead_id in engaged and accepted.status != "Active" and m.segment != "engaged-non-member":
+        # Asked only of someone who is a member in neither: a renewal the export
+        # shows and nobody has accepted yet is not a reason to ask.
+        outside = accepted.status != "Active" and m.status != "Active"
+        if m.insead_id in engaged and outside and m.segment != "engaged-non-member":
             via = engaged_by[m.insead_id]
             signs = ["registered for events"] if via - {Source.MAILCHIMP.value} else []
             signs += ["clicks in newsletters"] if Source.MAILCHIMP.value in via else []

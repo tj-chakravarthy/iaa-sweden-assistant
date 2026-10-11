@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from iaa.core.models import Proposal
+from iaa.core.models import Proposal, Source, SourceRecord
 from iaa.core.proposals import CHANGELOG_COLS, key_of, known_keys, reopened_rows, settled_rows
 from iaa.skills.register.apply import DERIVED, apply
 from iaa.skills.register.models import KIND, Member
@@ -90,6 +90,19 @@ def test_a_stored_segment_follows_the_status_the_register_accepted():
     after = reconcile("t", lapsed, [member(status="Inactive")], [], {}, as_of=TODAY)
     (row,) = [item for item in after.proposals if item.field == DERIVED]
     assert '"segment":["paying-passive","lapsed-since-previous"]' in row.new
+
+
+def test_the_membership_ask_waits_until_register_and_export_both_say_not_a_member():
+    signed_up = SourceRecord(source=Source.SIGNUP, name="Synthetic Person")
+
+    def raised(in_register, in_export):
+        register = member(status=in_register, segment="paying-passive" if in_register == "Active" else "lapsed")
+        result = reconcile("t", [register], [member(status=in_export)], [signed_up], {}, as_of=TODAY)
+        return {item.category for item in result.proposals}
+
+    assert raised("Inactive", "Inactive") == {"engaged-non-member"}
+    assert raised("Inactive", "Active") == {"reactivated"}  # renewed: the renewal is the question
+    assert "engaged-non-member" not in raised("Active", "Inactive")  # a lapse nobody has accepted yet
 
 
 def log_row(item, outcome, run_id="r"):
