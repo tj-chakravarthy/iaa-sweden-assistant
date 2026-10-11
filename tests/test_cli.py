@@ -87,3 +87,14 @@ def test_public_dry_run_never_prints_a_skill_brief(monkeypatch, capsys):
     skill = SimpleNamespace(name="synthetic", kinds=set(), propose=lambda run: ([], "synthetic@example.org"))
     cli.raise_proposals(SimpleNamespace(dry_run=True, run_id="synthetic"), [skill])
     assert "example.org" not in capsys.readouterr().out
+
+
+def test_a_failure_inside_a_library_is_reported_at_our_own_line(monkeypatch, capsys):
+    from iaa.core import auth
+
+    monkeypatch.setattr(cli, "app", lambda: auth.credentials("not json"))
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    with pytest.raises(SystemExit):
+        cli.main()
+    err = capsys.readouterr().err
+    assert "JSONDecodeError at auth.py:" in err and "decoder.py" not in err

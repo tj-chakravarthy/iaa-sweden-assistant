@@ -196,8 +196,12 @@ def main() -> None:
     except Exception as e:
         if not policy.logs_are_public():
             raise
-        # an exception message can quote data: print where it failed, not the message
-        where = traceback.extract_tb(e.__traceback__)[-1]
+        # An exception message can quote data: print where it failed, not the message.
+        # Where is our own deepest line, so the step is named and not a library file.
+        frames = traceback.extract_tb(e.__traceback__)
+        package = Path(__file__).resolve().parent
+        ours = [frame for frame in frames[1:] if package in Path(frame.filename).resolve().parents]
+        where = (ours or frames)[-1]
         typer.echo(
             f"run failed: {type(e).__name__} at {Path(where.filename).name}:{where.lineno} "
             "(message withheld: this log is public; re-run locally to see it)",
