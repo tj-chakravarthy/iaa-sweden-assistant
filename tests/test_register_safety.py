@@ -1,6 +1,9 @@
+import io
+import zipfile
 from datetime import date
 from pathlib import Path
 
+import openpyxl
 import pytest
 
 from iaa import cli
@@ -14,7 +17,7 @@ from iaa.skills.register.apply import apply
 from iaa.skills.register.brief import render
 from iaa.skills.register.models import KIND, Member
 from iaa.skills.register.reconcile import reconcile, segment
-from iaa.skills.register.run import _read_sources, refresh
+from iaa.skills.register.run import _read_sources, propose, refresh
 from iaa.skills.register.sources import parse_insead_export
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -167,6 +170,28 @@ def test_newest_invalid_export_suspends_export_changes(fake_book):
     box = _read_sources(run)
     assert box.export is None and box.export_error
     assert run.inbox[-1].kind == "insead-unreadable"
+
+
+def test_other_files_in_the_inbox_do_not_block_the_export(fake_book):
+    run = run_context(fake_book)
+    document = io.BytesIO()
+    with zipfile.ZipFile(document, "w") as archive:  # a .docx is a zip, like an .xlsx
+        archive.writestr("word/document.xml", "<w:document/>")
+    workbook = io.BytesIO()
+    book = openpyxl.Workbook()
+    book.active.append(["Budget", "SEK"])
+    book.save(workbook)
+    run.inbox = [
+        InboxFile("export.csv", (FIXTURES / "insead_export.csv").read_bytes(), "a", "1", "new"),
+        InboxFile("agenda.docx", document.getvalue(), "b", "2", "new"),
+        InboxFile("budget.xlsx", workbook.getvalue(), "c", "3", "new"),
+        InboxFile("notes.csv", b"a,b\n1,2\n", "d", "4", "new"),
+    ]
+    box = _read_sources(run)
+    assert box.export and not box.export_error and box.unrecognised == 3
+    assert [item.kind for item in run.inbox] == ["insead", "unknown", "unknown", "unknown"]
+    proposals, brief = propose(run)
+    assert proposals and "not recognised and not used: 3" in brief and "suspended" not in brief
 
 
 def test_download_failure_is_recorded_and_blocks_stale_export(fake_book, monkeypatch):

@@ -28,6 +28,7 @@ class _Sources:
     export: list[Member] | None = None  # the newest INSEAD export in the inbox, if any
     records: list[SourceRecord] = field(default_factory=list)
     export_error: bool = False
+    unrecognised: int = 0  # inbox files this skill could not use
 
 
 def _sources(run: Run) -> _Sources:
@@ -42,10 +43,10 @@ def _read_sources(run: Run, include_records: bool = True) -> _Sources:
 
     box = _Sources()
     from_files: list[SourceRecord] = []
-    unknown_download = False
+    download_failed = False
     for f in run.inbox:  # oldest first, so the newest INSEAD export wins
         if f.state == "unreadable":
-            unknown_download = True
+            download_failed = True  # it might be the newest export
             continue
         if f.state == "unsupported":
             continue
@@ -65,9 +66,11 @@ def _read_sources(run: Run, include_records: bool = True) -> _Sources:
             kind += "-unreadable"
         if kind != "unknown":
             f.kind = kind
-        elif f.raw.startswith(b"PK") or f.name.lower().endswith((".csv", ".xlsx")):
-            unknown_download = True
-    if unknown_download:
+        else:
+            # Not this skill's file: another document, or another skill's input.
+            # It is reported, and the export in the inbox is still used.
+            box.unrecognised += 1
+    if download_failed:
         box.export, box.export_error = None, True
     from_api: list[SourceRecord] = []
     s = run.settings
@@ -110,6 +113,8 @@ def propose(run: Run) -> tuple[list[Proposal], str]:
         brief += "\nOptional summary unavailable. Check model configuration.\n"
     if box.export_error:
         brief += "\nINSEAD source unavailable: export changes are suspended.\n"
+    if box.unrecognised:
+        brief += f"\nInbox files not recognised and not used: {box.unrecognised}.\n"
     return res.proposals, brief
 
 
