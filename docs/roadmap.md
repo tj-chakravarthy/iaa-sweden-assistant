@@ -3,14 +3,14 @@
 ## Now: the register
 
 1. Code, matcher, parsers, synthetic data, policy, checks. Done.
-2. Read and write the Sheet end to end on a dev register. The code and the
-   live test are written but have not run against a real sheet. To finish, see
-   [dev-register.md](dev-register.md), then switch the two schedules on.
+2. Read and write the Sheet end to end on a dev register. Done: the live test
+   passes on a dev spreadsheet and inbox folder. See
+   [dev-register.md](dev-register.md).
 3. Eventbrite and Mailchimp pulls are implemented and covered with synthetic
    tests. Validate association account access and real export shapes before
    relying on those feeds. No-shows require evidence of check-in at the event.
 4. Monthly approval loop, atomic workbook updates and the brief are implemented.
-   Production scheduling still waits for milestone 2.
+   The two schedules stay off until the real register is set up.
 
 ## Next skills
 

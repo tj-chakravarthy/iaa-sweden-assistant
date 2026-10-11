@@ -4,7 +4,7 @@ name: monthly-run
 # The log is public, so it prints counts only.
 #
 # Manual for now. This job writes to the real register. Add the schedule back
-# when the dev register test has passed (docs/dev-register.md):
+# once the real register is set up:
 #   schedule:
 #     - cron: "0 6 1 * *"
 on:

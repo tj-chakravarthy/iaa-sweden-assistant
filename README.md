@@ -43,8 +43,8 @@ inbox (Drive), Eventbrite, Mailchimp
 - Applied decisions, member updates and their audit entries commit together.
   A run locks out other runs while it writes. `iaa unlock` clears a lock left
   by an interrupted run; see the runbook.
-- Monthly run plus a daily dry run. Both are manual until the dev register
-  test passes.
+- Monthly run plus a daily dry run. Both are started by hand until the real
+  register is set up.
 
 ## Layout
 

@@ -1,8 +1,7 @@
 # The dev register
 
 A second spreadsheet with synthetic data only, where the assistant is tried
-before it touches the real one. Milestone 2 is passed when the live test is
-green here.
+before it touches the real one. The live test runs against it.
 
 Nothing real goes in it. No export, no payments sheet, no member.
 
@@ -81,9 +80,11 @@ Variables `IAA_DEV_SHEET_ID` and, if used, `IAA_DEV_INBOX_FOLDER_ID`. The
 `integration` workflow then runs the live test on every push to `main` that
 changes code, and on demand.
 
-## When it is green
+## After it passes
 
-1. Uncomment the `schedule:` lines at the top of
+1. Set up the real register. See Setup in the README.
+2. Then uncomment the `schedule:` lines at the top of
    `.github/workflows/inbox.yml` and `monthly.yml`.
-2. Mark milestone 2 done in `docs/roadmap.md`.
-3. Set up the real register. See Setup in the README.
+
+Run the live test again after any change to how the workbook is read or
+written.
