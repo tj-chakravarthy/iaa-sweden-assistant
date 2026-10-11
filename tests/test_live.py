@@ -190,7 +190,7 @@ def test_what_a_person_types_is_understood(book):
     assert "applied 1, acknowledged 0, rejected 0" in out
     changed = next(m for m in book.read("members", Member) if m.insead_id == "900003")
     assert changed.member_expire == "2027-12-31"
-    assert _aliases(Run(book, settings())) == {"hanna lindqvist": "900003"}
+    assert _aliases(Run(book, settings())) == {"hanna lindqvist": {"900003"}}
 
 
 def test_rows_are_added_below_a_gap(book):
