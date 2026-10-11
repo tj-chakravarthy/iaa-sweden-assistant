@@ -9,8 +9,8 @@ answered.
 A row raised from the INSEAD export stands only while the export says so.
 live lists the rows this run stands by, so that older ones can be replaced.
 
-Stored segments follow the status the register has accepted, not a status
-change that is still waiting for a decision. The brief follows the export.
+Stored segments follow the status the register has accepted. A status change
+still waiting for a decision does not move them. The brief follows the export.
 
 Derived values (segment, event counts, payment years) change for many members
 at once. They go in one row per run, not one per member, so the rows that need

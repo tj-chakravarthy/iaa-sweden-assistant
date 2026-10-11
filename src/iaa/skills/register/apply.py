@@ -11,7 +11,8 @@ approval and calls carry_out for each "yes". Outcomes:
 
 A row raised from the INSEAD export is only carried out while the export in
 the inbox still says so. If the export has moved on, the row stays open with a
-note and the next reconcile replaces it. Rows added by hand are not checked.
+note and the next reconcile replaces it. Of rows added by hand, only one
+that adds a record is checked.
 
 Derived values (segment, event counts, payment years) come as one row for many
 members. Its new cell is JSON: {id: {field: [old, new]}}. All of it applies or

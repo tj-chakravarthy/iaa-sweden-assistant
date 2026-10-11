@@ -2,7 +2,8 @@
 
 Shared tabs:
 - proposals  open proposals, waiting for yes/no in the approve column
-- changelog  decided proposals: applied, acknowledged or rejected
+- changelog  decided proposals (applied, acknowledged, rejected) and the
+             reopened and superseded rows a run adds
 - runs       one row per inbox file per run
 - brief_*    one tab per skill per month
 

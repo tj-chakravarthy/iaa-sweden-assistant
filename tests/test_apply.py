@@ -135,7 +135,7 @@ def test_a_date_is_stored_one_way_however_it_was_typed():
     m = Member(insead_id="1", name="Anna Lindqvist", member_expire="2026-12-31")
     members, _, _ = apply([m], [proposal(field="member_expire", old="2026-12-31", new="12/31/2027", approve="yes")])
     assert members[0].member_expire == "2027-12-31"
-    # one that could be two dates is refused, not guessed
+    # one that could be two dates is refused
     unclear = proposal(field="member_expire", old="2027-12-31", new="03/04/2028", approve="yes")
     members, remaining, log = apply(members, [unclear])
     assert members[0].member_expire == "2027-12-31" and not log

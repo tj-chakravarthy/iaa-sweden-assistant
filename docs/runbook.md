@@ -12,7 +12,9 @@
    means handled.
 4. Paste the brief tab into the board agenda. Its figures follow the latest
    INSEAD export, including changes you have not approved yet. Segments
-   stored in `members` follow the status you have approved.
+   stored in `members` follow the status you have approved, one round later:
+   after a `yes` on a status change, the segment that goes with it comes in
+   the next run's `derived-update` row and needs its own `yes`.
 
 ## What a decision does
 
@@ -32,15 +34,18 @@
   lapse, the member renews, and a year later lapses again.
 - A row raised from the INSEAD export follows the export. If a newer export
   says something else, an undecided row is replaced or removed. A `yes` on a
-  row the export no longer supports is not applied: it stays with a note until
-  the next reconcile replaces it.
-- A row you add by hand is never replaced or checked against the export.
-  Leave its `source` blank.
+  row the export no longer supports is not applied. The next reconcile takes
+  the row away, writes `superseded` in the changelog and asks about what the
+  export says now.
+- A row you add by hand is never replaced. A change in it is not checked
+  against the export. Leave its `source` blank. A person cannot be added this
+  way: a new record has to be in the export.
 - A `no` to adding a person stands even if their record changes later.
 - If a record changes before anyone decides on adding it, its row is replaced
   by one with the new details.
 - A `yes` that cannot be carried out stays in `proposals` with the reason in
-  `note`, and is tried again on each run.
+  `note`, and is tried again on each run. If it is a row the assistant raised
+  and the next reconcile no longer stands by it, it is taken away as above.
 - New records carry a complete minimised snapshot in `new`. Review that
   snapshot before approving. The export must still match it when applied.
   Older proposals containing only `new record` must be rejected and replaced
