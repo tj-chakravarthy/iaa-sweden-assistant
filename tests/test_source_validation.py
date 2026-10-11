@@ -36,13 +36,42 @@ def test_invalid_exports_fail_closed(problem):
     if problem == "missing":
         rows[3][1] = "Unknown column"
     elif problem == "duplicate":
-        rows.append(rows[-1])
+        status = rows[3].index("Membership")
+        rows.append(rows[-1][:])
+        rows[-1][status] = "Active" if rows[-2][status] != "Active" else "Inactive"
     elif problem == "empty":
         rows = rows[:4]
     else:
         rows[-1] = rows[-1][:-1]
     with pytest.raises(ValueError):
         parse_insead_export(encoded(rows))
+
+
+def test_a_person_in_two_associations_is_one_record():
+    rows = read_rows((FIXTURES / "insead_export.csv").read_bytes())
+    naa, status = rows[3].index("NAA / IAA"), rows[3].index("Membership")
+    expected = parse_insead_export(encoded(rows))
+    other = rows[4][:]
+    other[naa] = "IAA Other"
+    assert parse_insead_export(encoded(rows[:4] + [other] + rows[4:])) == expected
+    # the IAA SWE row is kept even when the other association's row disagrees
+    other[status] = "Inactive" if rows[4][status] == "Active" else "Active"
+    assert parse_insead_export(encoded(rows[:4] + [other] + rows[4:])) == expected
+    # an exact copy is the same record
+    assert parse_insead_export(encoded(rows + [rows[-1]])) == expected
+
+
+def test_two_rows_outside_this_association():
+    rows = read_rows((FIXTURES / "insead_export.csv").read_bytes())
+    naa, company = rows[3].index("NAA / IAA"), rows[3].index("Company")
+    first, second = rows[4][:], rows[4][:]
+    first[naa], second[naa] = "IAA B", "IAA A"
+    for ordered in ([first, second], [second, first]):  # one is kept, the same one in either order
+        members = parse_insead_export(encoded(rows[:4] + ordered + rows[5:]))
+        assert len(members) == len(rows) - 4 and members[0].naa == "IAA A"
+    second[company] = "Other AB"  # they disagree and neither is this association's
+    with pytest.raises(ValueError, match="duplicate INSEAD IDs"):
+        parse_insead_export(encoded(rows[:4] + [first, second] + rows[5:]))
 
 
 def test_preferred_given_name():

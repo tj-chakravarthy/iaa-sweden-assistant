@@ -78,12 +78,16 @@ If there are several INSEAD exports in the inbox, the most recently modified
 one is used. An export filtered to active members would make every other
 member look as if they had left INSEAD, so drop the unfiltered one.
 
-The newest export must have the required columns, unique IDs and complete
-rows. An empty or invalid export suspends export changes rather than selecting
-an older file. An undownloadable file or an unrecognised table also suspends
-export changes because it might be the latest export. Unsupported Drive
-documents and folders are counted and skipped. CSVs may use commas, semicolons
-or tabs; XLSX data must be on the first worksheet.
+The newest export must have the required columns and complete rows. An empty
+or invalid export suspends export changes rather than selecting an older file.
+An undownloadable file or an unrecognised table also suspends export changes
+because it might be the latest export. Unsupported Drive documents and folders
+are counted and skipped. CSVs may use commas, semicolons or tabs; XLSX data
+must be on the first worksheet.
+
+A person in two associations has two rows with the same ID. One record is
+kept, from the IAA SWE row if there is one. Rows for one ID that disagree on
+anything else make the export invalid, unless exactly one is the IAA SWE row.
 
 An existing workbook gains the `status_changed` column on the next approved
 member write. Existing dates and list cells remain readable. Do not rearrange

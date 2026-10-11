@@ -11,6 +11,7 @@ from ...core.models import Model
 from ...core.normalize import parse_date
 
 KIND = "register-change"  # the one kind of proposal this skill raises and carries out
+HOME_NAA = "IAA SWE"  # this association, as the NAA / IAA column spells it
 
 
 class MatchMethod(StrEnum):

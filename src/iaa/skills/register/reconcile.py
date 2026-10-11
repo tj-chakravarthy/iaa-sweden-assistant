@@ -20,7 +20,7 @@ from ...core.policy import assert_minimised
 from ...core.proposals import Proposer
 from .apply import value_text
 from .match import Matcher
-from .models import KIND, Match, MatchMethod, Member
+from .models import HOME_NAA, KIND, Match, MatchMethod, Member
 from .sources.eventbrite import attendee_key, event_key
 
 # Fields the INSEAD export decides. The rest belong to the register and are
@@ -366,7 +366,7 @@ def aggregates(
     return {
         "records": len(members),
         "active": len(active),
-        "active_iaa_swe": sum(m.naa == "IAA SWE" for m in active),
+        "active_iaa_swe": sum(m.naa == HOME_NAA for m in active),
         "expiring_31_dec": sum(parse_date(m.member_expire) == year_end for m in active),
         "by_region_active": dict(Counter(m.region for m in active)),
         "by_programme_active": dict(Counter(m.programme for m in active)),
