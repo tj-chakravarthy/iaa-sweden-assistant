@@ -13,6 +13,7 @@ from iaa.core.connectors.sheets import Workbook
 from iaa.core.models import Proposal, Source, SourceRecord
 from iaa.core.skill import InboxFile, Run
 from iaa.registry import SKILLS
+from iaa.skills.register import run as register_run
 from iaa.skills.register.apply import apply
 from iaa.skills.register.brief import render
 from iaa.skills.register.models import KIND, Member
@@ -192,6 +193,27 @@ def test_other_files_in_the_inbox_do_not_block_the_export(fake_book):
     assert [item.kind for item in run.inbox] == ["insead", "unknown", "unknown", "unknown"]
     proposals, brief = propose(run)
     assert proposals and "not recognised and not used: 3" in brief and "suspended" not in brief
+
+
+def test_the_inbox_is_parsed_once_however_many_new_records_are_approved(fake_book, monkeypatch):
+    run = run_context(fake_book)
+    raw = (FIXTURES / "insead_export.csv").read_bytes()
+    run.inbox = [
+        InboxFile("old.csv", raw, "a", "1", "seen"),
+        InboxFile("new.csv", b"Download Alumni Details\ninvalid\n", "b", "2", "new"),
+    ]
+    calls = []
+    monkeypatch.setattr(
+        register_run, "_read_sources", lambda *args, **kwargs: calls.append(1) or _read_sources(*args, **kwargs)
+    )
+    applier = SKILLS[0].applier(run)
+    approved = [
+        item.model_copy(update={"approve": "yes"})
+        for item in reconcile("test", [], parse_insead_export(raw), [], {}, as_of=TODAY).proposals
+    ]
+    assert len(approved) == 30
+    assert {applier.carry_out(item) for item in approved} == {("", "the latest export is unavailable or invalid")}
+    assert len(calls) == 1
 
 
 def test_download_failure_is_recorded_and_blocks_stale_export(fake_book, monkeypatch):

@@ -156,13 +156,15 @@ class _Applier:
         self.run = run
         self.by_id = {m.insead_id: m for m in _members(run)}
         self.export_by_id = None
+        self.export_error = False
 
     def carry_out(self, p: Proposal) -> tuple[str, str]:
-        if p.category == "new-record" and self.export_by_id is None:
-            box = _read_sources(self.run, include_records=False)
-            if box.export_error:
-                return "", "the latest export is unavailable or invalid"
+        if p.category == NEW_RECORD and self.export_by_id is None:
+            box = _read_sources(self.run, include_records=False)  # once: it parses the whole inbox
+            self.export_error = box.export_error
             self.export_by_id = {member.insead_id: member for member in (box.export or [])}
+        if p.category == NEW_RECORD and self.export_error:
+            return "", "the latest export is unavailable or invalid"
         return carry_out(p, self.by_id, self.export_by_id or {}, self.run.today)
 
     def commit(self) -> None:
