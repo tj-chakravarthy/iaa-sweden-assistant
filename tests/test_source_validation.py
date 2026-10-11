@@ -95,7 +95,7 @@ def test_shared_and_conflicting_emails_are_ambiguous():
             matched = Matcher(ordered).match(
                 SourceRecord(source=Source.EVENTBRITE, name=members[1].name, emails=emails)
             )
-            assert matched.method == MatchMethod.AMBIGUOUS
+            assert matched.method == MatchMethod.EMAIL_AMBIGUOUS  # not a name clash
             assert matched.candidates == ["1", "2"] and matched.insead_id is None
 
 

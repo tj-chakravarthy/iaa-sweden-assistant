@@ -163,3 +163,20 @@ def test_an_address_learned_by_name_is_flagged():
     ]
     (row,) = [p for p in reconcile("t", ms, None, by_email, {}, as_of=AS_OF).proposals if p.category == "alias-update"]
     assert (row.suggested_action, row.confidence) == ("Accept", 1.0)
+
+
+def test_a_shared_email_and_a_shared_name_are_told_apart():
+    pair = [
+        Member(insead_id="1", name="Anna Lindqvist", email_preferred="shared@example.org"),
+        Member(insead_id="2", name="Anna Lindqvist", email_preferred="shared@example.org"),
+    ]
+    by_email = SourceRecord(
+        source=Source.EVENTBRITE, emails=["shared@example.org"], name="", status="INSEAD Alumni ticket"
+    )
+    by_name = SourceRecord(source=Source.EVENTBRITE, emails=[], name="Anna Lindqvist", status="INSEAD Alumni ticket")
+    assert Matcher(pair).match(by_email).method == MatchMethod.EMAIL_AMBIGUOUS
+    assert Matcher(pair).match(by_name).method == MatchMethod.AMBIGUOUS
+    res = reconcile("t", pair, None, [by_email], {}, as_of=AS_OF)
+    assert res.aggregates["match_methods"] == {"email-ambiguous": 1}
+    (row,) = [p for p in res.proposals if p.category == "unmatched-alumni-ticket"]
+    assert "email that is on several records" in row.reason and "['1', '2']" in row.reason

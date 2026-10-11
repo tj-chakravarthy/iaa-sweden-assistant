@@ -68,7 +68,7 @@ class Matcher:
         """Email only. For a source where a shared name says nothing about who someone is."""
         ids = set().union(*(self.email_index.get(norm_email(email), set()) for email in rec.emails))
         if len(ids) > 1:
-            return Match(insead_id=None, method=MatchMethod.AMBIGUOUS, confidence=0.5, candidates=sorted(ids))
+            return Match(insead_id=None, method=MatchMethod.EMAIL_AMBIGUOUS, confidence=0.5, candidates=sorted(ids))
         if ids:
             return Match(insead_id=next(iter(ids)), method=MatchMethod.EMAIL, confidence=1.0)
         return Match(insead_id=None, method=MatchMethod.UNMATCHED)

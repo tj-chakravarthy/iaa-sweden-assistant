@@ -339,7 +339,11 @@ def reconcile(
                 subject=r.name,
                 field="alias",
                 new=";".join(r.emails),
-                reason="registered with an INSEAD-alumni ticket but matches no record"
+                reason=(
+                    "registered with an INSEAD-alumni ticket, with an email that is on several records"
+                    if mt.method == MatchMethod.EMAIL_AMBIGUOUS
+                    else "registered with an INSEAD-alumni ticket but matches no record"
+                )
                 + (f"; candidates {mt.candidates}" if mt.candidates else ""),
                 source=f"{r.source} {r.payload.get('event', '')}",
                 confidence=mt.confidence,
