@@ -138,6 +138,18 @@ def test_an_edit_during_the_run_is_detected_before_commit(fake_book):
     assert book.proposals() and LOCK_TAB not in fake_book.tabs
 
 
+def test_a_tab_is_fetched_once_per_run_and_once_more_before_the_commit(fake_book, monkeypatch):
+    book, _ = setup(fake_book)
+    fetched = []
+    fetch = book._raw_values
+    monkeypatch.setattr(book, "_raw_values", lambda name: fetched.append(name) or fetch(name))
+    with book.transaction():
+        assert book.proposals() == book.proposals() and book.rows("proposals")
+        assert fetched.count("proposals") == 1
+        book.write_proposals([])
+    assert fetched.count("proposals") == 2 and not book.proposals()
+
+
 def test_unlock_shows_the_lock_and_removes_it_only_when_told(fake_book, monkeypatch):
     book, run = setup(fake_book)
     original = fake_book.batch_update

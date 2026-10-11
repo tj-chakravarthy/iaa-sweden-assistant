@@ -91,6 +91,8 @@ class Transaction:
     def read(self, name: str) -> list[list[Any]]:
         if name in self.staged:
             return self.staged[name]
+        if name in self.original:
+            return self.original[name]  # commit checks it is still what the tab holds
         values = self.book._raw_values(name)
         if name not in self.sheets and values:
             raise RuntimeError("a tab was added during the run; no data was written")
