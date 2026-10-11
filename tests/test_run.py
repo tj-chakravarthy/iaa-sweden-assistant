@@ -126,15 +126,47 @@ def test_dry_run_writes_nothing_and_prints_counts_only(book):
     assert_counts_only(out, book)
 
 
+def as_csv(rows):
+    stream = io.StringIO()
+    csv.writer(stream).writerows(rows)
+    return stream.getvalue().encode()
+
+
 def another_event(book, number):
     """Drop an attendee file for a new event with the first member registered."""
     rows = read_rows(book.inbox["report.csv"])[:2]
     for column, value in (("Event ID", f"60{number}"), ("Event name", f"Synthetic Dinner {number}")):
         rows[1][rows[0].index(column)] = value
     rows[1][rows[0].index("Barcode number")] = f"dinner{number}"
-    stream = io.StringIO()
-    csv.writer(stream).writerows(rows)
-    book.inbox[f"dinner{number}.csv"] = stream.getvalue().encode()
+    book.inbox[f"dinner{number}.csv"] = as_csv(rows)
+
+
+def change_company(book, company):
+    """A newer export in which the first record has another company."""
+    rows = read_rows(book.inbox["Download (3).csv"])
+    rows[4][rows[3].index("Company")] = company
+    book.inbox["Download (3).csv"] = as_csv(rows)
+
+
+def test_a_changed_record_replaces_its_undecided_row(book):
+    subject_id, new = PROPOSAL_COLS.index("subject_id"), PROPOSAL_COLS.index("new")
+    run("register", "reconcile")
+    change_company(book, "Other AB")
+    assert "new proposals: 1" in run("register", "reconcile")
+    added = [row for row in book.data("proposals") if row[CATEGORY] == "new-record"]
+    assert len(added) == 30  # still one row per record
+    (changed,) = [row for row in added if str(row[subject_id]) == "900000"]
+    assert "Other AB" in changed[new]
+
+
+def test_a_no_to_a_new_record_stands_when_the_record_changes(book):
+    run("register", "reconcile")
+    decide(book, lambda category: "no")
+    assert "rejected 36" in run("run-all")
+    change_company(book, "Other AB")
+    out = run("run-all")
+    assert "new proposals: 0" in out and book.data("proposals") == []
+    assert "members" not in book.tabs
 
 
 def derived_rows(book):

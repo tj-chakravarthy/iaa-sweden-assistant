@@ -24,6 +24,9 @@
 
 - A `no` or an acknowledged item is a standing decision. That exact proposal
   is not raised again. A different change to the same member is.
+- A `no` to adding a person stands even if their record changes later.
+- If a record changes before anyone decides on adding it, its row is replaced
+  by one with the new details.
 - A `yes` that cannot be carried out stays in `proposals` with the reason in
   `note`, and is tried again on each run.
 - New records carry a complete minimised snapshot in `new`. Review that

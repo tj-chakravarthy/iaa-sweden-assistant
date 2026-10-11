@@ -18,7 +18,7 @@ from . import sources
 from .apply import apply, carry_out
 from .brief import render
 from .models import KIND, Member
-from .reconcile import reconcile
+from .reconcile import NEW_RECORD, reconcile
 
 FIXTURES = Path(__file__).resolve().parents[4] / "tests" / "fixtures"
 
@@ -101,7 +101,12 @@ def _aliases(run: Run) -> dict[str, str]:
 
 def propose(run: Run) -> tuple[list[Proposal], str]:
     box = _sources(run)
-    res = reconcile(run.run_id, _members(run), box.export, box.records, _aliases(run), run.known(), run.today)
+    declined = {
+        str(row.get("subject_id", "")).strip()
+        for row in run.book.rows("changelog")
+        if row.get("kind") == KIND and row.get("category") == NEW_RECORD and row.get("outcome") == "rejected"
+    }
+    res = reconcile(run.run_id, _members(run), box.export, box.records, _aliases(run), run.known(), run.today, declined)
     run.memo["register.live"] = res.live  # for refresh, which runs after this
     unavailable = False
     try:

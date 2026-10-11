@@ -140,6 +140,20 @@ def test_expiring_counts_this_year_end_only():
     assert reconcile("t", ms, None, [], {}, as_of=AS_OF).aggregates["expiring_31_dec"] == 2
 
 
+def test_declined_records_are_not_proposed_again():
+    ms, _ = load()
+    changed = [m.model_copy() for m in ms]
+    changed[0].company = "Other AB"
+    res = reconcile("t", [], changed, [], {}, as_of=AS_OF, declined={ms[0].insead_id})
+    added = [p.subject_id for p in res.proposals if p.category == "new-record"]
+    assert len(added) == len(ms) - 1 and ms[0].insead_id not in added
+    # the rows this run stands by: an open row with an older snapshot is not among them
+    stale = reconcile("t", [], ms, [], {}, as_of=AS_OF).proposals[1]
+    assert key_of(stale) in res.live["new-record"]
+    changed[1].company = "Third AB"
+    assert key_of(stale) not in reconcile("t", [], changed, [], {}, as_of=AS_OF).live["new-record"]
+
+
 def test_brief_has_no_personal_data():
     ms, recs = load()
     res = reconcile("t", ms, None, recs, {}, as_of=AS_OF)

@@ -61,6 +61,7 @@ REGISTER_OWNED = (
 )
 NO_CONTACT = "None: marked do-not-contact"
 DERIVED_UPDATE = "derived-update"  # category of the row that carries derived values
+NEW_RECORD = "new-record"
 CELL_LIMIT = 40_000  # a Sheets cell holds 50,000 characters
 
 
@@ -153,10 +154,12 @@ def reconcile(
     aliases: dict[str, str],
     known: Iterable[str] = (),
     as_of: Date | None = None,
+    declined: Iterable[str] = (),
 ) -> ReconcileResult:
     """current = members tab. new_export = parsed INSEAD export or None.
     records = payments, Eventbrite, Mailchimp, sign-ups.
     known = keys already open, rejected or acknowledged.
+    declined = IDs the board said no to adding. That stands if their record changes.
     """
     as_of = as_of or Date.today()
     unique_events = {attendee_key(record): record for record in records if record.source == Source.EVENTBRITE}
@@ -167,15 +170,20 @@ def reconcile(
         assert_minimised(r.payload)
     propose = Proposer(run_id, KIND, known)
     by_id = {m.insead_id: m for m in current}
+    declined = set(declined)
+    live: dict[str, set[str]] = {}
 
     # 1. INSEAD export: field changes, new records, records that are gone
     if new_export is not None:
         if not new_export or len({member.insead_id for member in new_export}) != len(new_export):
             raise ValueError("empty export or duplicate INSEAD IDs")
+        live[NEW_RECORD] = set()
         for n in new_export:
             c = by_id.get(n.insead_id)
+            if c is None and n.insead_id in declined:
+                continue
             if c is None:
-                propose(
+                key = propose(
                     subject_id=n.insead_id,
                     subject=n.name,
                     field="*",
@@ -183,9 +191,10 @@ def reconcile(
                     new=n.model_dump_json(),
                     reason="present in INSEAD export, not in register",
                     source="insead",
-                    category="new-record",
+                    category=NEW_RECORD,
                     suggested_action="Add to register",
                 )
+                live[NEW_RECORD].add(key)  # a row with an older snapshot of this record is out of date
                 continue
             for f in EXPORT_FIELDS:
                 o, v = getattr(c, f), getattr(n, f)
@@ -376,7 +385,7 @@ def reconcile(
             )
         if changes and m.insead_id in by_id:  # members not in the register yet get theirs once added
             derived[m.insead_id] = changes
-    live = {DERIVED_UPDATE: {propose(**row) for row in _derived_rows(derived)}}
+    live[DERIVED_UPDATE] = {propose(**row) for row in _derived_rows(derived)}
 
     agg = aggregates(base, matches, engaged, propose.proposals, as_of)
     return ReconcileResult(proposals=propose.proposals, matches=matches, aggregates=agg, live=live)
