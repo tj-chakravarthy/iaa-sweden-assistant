@@ -200,6 +200,10 @@ def test_a_yes_on_a_change_the_export_has_dropped_is_not_applied(book):
     assert (row["new"], row["approve"], row["note"]) == ("Third AB", "", "")
 
 
+def outcomes(book, outcome):
+    return [row for row in book.data("changelog") if row[OUTCOME] == outcome]
+
+
 def test_a_row_added_by_hand_is_left_alone_and_applied(book):
     loaded(book)
     by_hand = dict.fromkeys(PROPOSAL_COLS, "")
@@ -237,6 +241,23 @@ def test_a_no_on_a_lapse_is_asked_again_if_the_lapse_comes_back(book):
     edit_export(book, "Membership", "Inactive")  # lapsed again, a year on: asked again
     run("run-all")
     assert len(rows_of(book, "lapsed")) == 1
+
+
+def test_a_no_on_a_lapse_stands_through_an_export_that_leaves_the_member_out(book):
+    loaded(book)
+    edit_export(book, "Membership", "Inactive")
+    run("register", "reconcile")
+    decide(book, lambda category: "no" if category == "lapsed" else "")
+    assert "rejected 1" in run("run-all")
+    full = book.inbox["Download (3).csv"]
+    rows = read_rows(full)
+    del rows[4]  # someone drops a filtered export without 900000
+    book.inbox["Download (3).csv"] = as_csv(rows)
+    run("run-all")
+    assert len(rows_of(book, "not-in-export")) == 1 and not outcomes(book, "reopened")
+    book.inbox["Download (3).csv"] = full  # the full export again. INSEAD said the same all along
+    run("run-all")
+    assert not rows_of(book, "lapsed") and not rows_of(book, "not-in-export") and not outcomes(book, "reopened")
 
 
 def test_a_changed_record_replaces_its_undecided_row(book):

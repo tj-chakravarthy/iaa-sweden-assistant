@@ -20,7 +20,7 @@ from . import sources
 from .apply import apply, carry_out
 from .brief import render
 from .models import ADDED_LATER, EXPORT_FIELDS, EXPORT_SOURCE, KIND, Member
-from .reconcile import NEW_RECORD, reconcile
+from .reconcile import NEW_RECORD, NOT_IN_EXPORT, reconcile
 
 FIXTURES = Path(__file__).resolve().parents[4] / "tests" / "fixtures"
 RAISED_BY_A_RUN = (EXPORT_SOURCE, "register")  # sources reconcile writes. A row added by hand has another
@@ -161,9 +161,11 @@ def _out_of_date(proposal: Proposal, live: dict[str, set[str]]) -> bool:
 def withdrawn(run: Run) -> set[str]:
     """Answers to questions the export has stopped asking, e.g. a no to a lapse
     for someone who has since renewed. If the question returns, it is asked again.
-    A no to adding a person is not among them: that stands.
+    A no to adding a person is not among them: that stands. So does an answer
+    about someone this export leaves out, since it says nothing about them.
     """
     live = run.memo.get("register.live", {})
+    in_export = {member.insead_id for member in _sources(run).export or []}
     return {
         key
         for key, row in settled_rows(run.book.rows("changelog")).items()
@@ -172,6 +174,7 @@ def withdrawn(run: Run) -> set[str]:
         and row.get("category") != NEW_RECORD
         and row.get("category") in live
         and key not in live[row.get("category")]
+        and (row.get("category") == NOT_IN_EXPORT or str(row.get("subject_id", "")).strip() in in_export)
     }
 
 
