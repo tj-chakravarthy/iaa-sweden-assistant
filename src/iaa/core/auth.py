@@ -22,9 +22,9 @@ SCOPES = [
 ]
 
 
-def credentials():
-    raw = os.environ.get("GOOGLE_SA_JSON")
+def credentials(raw: str | None = None, scopes: list[str] | None = None):
+    raw = raw if raw is not None else os.environ.get("GOOGLE_SA_JSON")
     if not raw:
         raise RuntimeError("GOOGLE_SA_JSON is not set (service-account JSON, as a string)")
     info = json.loads(raw)
-    return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    return service_account.Credentials.from_service_account_info(info, scopes=scopes if scopes is not None else SCOPES)

@@ -101,7 +101,7 @@ class Skill:
     name: str  # `iaa <name> ...`, docs/skills/<name>.md, the brief_<name>_YYYY-MM tab
     kinds: frozenset[str]  # the proposal kinds it raises and carries out; each is in policy.KNOWN_KINDS
     verb: str  # what its proposing step is called: `iaa <name> <verb>`
-    # read the sources, return (new proposals, brief). Reads only. The brief is counts only.
+    # Read the sources and return proposals plus a private workbook brief.
     propose: Callable[[Run], tuple[list[Proposal], str]]
     applier: Callable[[Run], Applier]
     # run on synthetic fixtures, no network: (passed, lines to print)

@@ -81,7 +81,14 @@ def assert_counts_only(data: object) -> None:
 
 
 def llm_personal_data_allowed() -> bool:
-    return os.environ.get("IAA_LLM_PERSONAL_DATA", "false").strip().lower() == "true"
+    env = os.environ
+    return (
+        env.get("IAA_LLM_PERSONAL_DATA", "false").strip().lower() == "true"
+        and env.get("IAA_LLM_PROVIDER", "none").strip().lower() == "vertex"
+        and all(
+            env.get(name, "").strip() for name in ("IAA_VERTEX_PROJECT", "IAA_VERTEX_LOCATION", "IAA_VERTEX_SA_JSON")
+        )
+    )
 
 
 def logs_are_public() -> bool:

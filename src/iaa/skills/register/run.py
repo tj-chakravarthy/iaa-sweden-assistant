@@ -99,11 +99,15 @@ def _aliases(run: Run) -> dict[str, str]:
 def propose(run: Run) -> tuple[list[Proposal], str]:
     box = _sources(run)
     res = reconcile(run.run_id, _members(run), box.export, box.records, _aliases(run), run.known(), run.today)
+    unavailable = False
     try:
         llm = run.llm
     except Exception:
         llm = None
+        unavailable = True
     brief = render(run.today, res.aggregates, llm)
+    if unavailable:
+        brief += "\nOptional summary unavailable. Check model configuration.\n"
     if box.export_error:
         brief += "\nINSEAD source unavailable: export changes are suspended.\n"
     return res.proposals, brief

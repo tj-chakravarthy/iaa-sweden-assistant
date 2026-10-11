@@ -37,7 +37,11 @@ jobs:
           IAA_MAILCHIMP_API_KEY: ${{ secrets.IAA_MAILCHIMP_API_KEY }}
           IAA_MAILCHIMP_LIST_ID: ${{ vars.IAA_MAILCHIMP_LIST_ID }}
           IAA_LLM_PROVIDER: ${{ vars.IAA_LLM_PROVIDER }}
+          IAA_LLM_MODEL: ${{ vars.IAA_LLM_MODEL }}
           IAA_GEMINI_API_KEY: ${{ secrets.IAA_GEMINI_API_KEY }}
+          IAA_VERTEX_PROJECT: ${{ vars.IAA_VERTEX_PROJECT }}
+          IAA_VERTEX_LOCATION: ${{ vars.IAA_VERTEX_LOCATION }}
+          IAA_VERTEX_SA_JSON: ${{ secrets.IAA_VERTEX_SA_JSON }}
           IAA_LLM_PERSONAL_DATA: "false"
           IAA_ENVIRONMENT: prod
         run: |

@@ -3,8 +3,9 @@
 ## Where member data lives
 
 INSEAD's alumni database (source of truth), the register Sheet, the inbox
-folder, Eventbrite and Mailchimp. All owned by the association or INSEAD. The
-assistant reads these and writes to the register only.
+folder, Eventbrite and Mailchimp. The register and inbox remain in the
+maintainer's Drive until migration; the other systems belong to INSEAD or the
+association. The assistant reads these and writes to the register only.
 
 Member data never goes into this repository, into run logs, or into an AI
 prompt before the migration.
@@ -32,15 +33,19 @@ and has tests.
 | Phase | Model | May see | Why |
 |---|---|---|---|
 | Until migration | Gemini with a personal key, or none | Counts only | Free-tier terms allow Google to use prompts to improve its products, as understood in October 2026 |
-| After migration | Gemini in the association's own Google project | Counts, and unmatched records for resolution | Enterprise terms: prompts are not used for training |
+| After migration | Vertex AI in the association's own Google project | Counts only in the current implementation | The board confirms the selected service's data terms before approving any personal-data feature |
 
-Until the migration, the code that talks to a model accepts numbers under
-labels and refuses anything else (`core.policy.assert_counts_only`). This
-applies to every skill.
+The code that talks to a model accepts finite nonnegative numbers under a
+fixed set of labels and refuses anything else (`core.policy.assert_counts_only`).
+Event titles, programme names and other source text are never sent. The
+private brief may include event titles; public dry runs print only proposal
+and inbox counts. This applies to every skill.
 
 The switch is the setting `IAA_LLM_PERSONAL_DATA`. It is read only in
 `core.policy` and is fixed to `false` in the monthly run. Changing it is a
-board decision.
+board decision. The flag also requires the Vertex provider and its project,
+location and credentials. Backend setup is in [migration.md](migration.md).
+No member-level model method exists yet; the flag cannot relax summarisation.
 
 ## Retention
 
