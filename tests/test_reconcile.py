@@ -195,3 +195,4 @@ def test_the_summary_is_told_about_the_whole_queue_in_fixed_labels():
     text = render(AS_OF, result.aggregates, Summary())
     assert sent[0]["proposals"] == {"total": 11, "new": 2, "open": 5, "blocked": 3}
     assert "- Open from earlier runs: 5" in text and "- 11 x lapsed" in text
+    assert "unavailable" not in text  # the labels were accepted

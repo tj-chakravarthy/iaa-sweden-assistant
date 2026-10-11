@@ -209,19 +209,34 @@ def outcomes(book, outcome):
     return [row for row in book.data("changelog") if row[OUTCOME] == outcome]
 
 
-def test_a_row_added_by_hand_is_left_alone_and_applied(book):
-    loaded(book)
+def add_by_hand(book):
+    """The owner types a row: another company for the first member."""
     by_hand = dict.fromkeys(PROPOSAL_COLS, "")
     by_hand |= dict(
         kind="register-change", subject_id="900000", subject="x", field="company", category="profile-update"
     )
     by_hand |= dict(old="Example AB", new="By Hand AB")
     book.tabs["proposals"].cells.append([by_hand[c] for c in PROPOSAL_COLS])
+
+
+def test_a_row_added_by_hand_is_left_alone_and_applied(book):
+    loaded(book)
+    add_by_hand(book)
     run("register", "reconcile")  # the export says Example AB, which is not what this row says
     assert [row["new"] for row in rows_of(book, "profile-update")] == ["By Hand AB"]
     decide(book)
     run("run-all")
     assert first_member(book).company == "By Hand AB"
+
+
+def test_a_no_on_a_row_added_by_hand_stands(book):
+    loaded(book)
+    add_by_hand(book)
+    decide(book, lambda category: "no")
+    run("run-all")
+    run("run-all")  # the export never asked this, so there is nothing to reopen
+    assert len(outcomes(book, "rejected")) == 1 and not outcomes(book, "reopened")
+    assert first_member(book).company == "Example AB"
 
 
 def test_a_no_on_a_lapse_is_asked_again_if_the_lapse_comes_back(book):
@@ -283,7 +298,7 @@ def test_a_no_to_a_new_record_stands_when_the_record_changes(book):
     change_company(book, "Other AB")
     out = run("run-all")
     assert "new proposals: 0" in out and book.data("proposals") == []
-    assert "members" not in book.tabs
+    assert "members" not in book.tabs and not outcomes(book, "reopened")
 
 
 def derived_rows(book):

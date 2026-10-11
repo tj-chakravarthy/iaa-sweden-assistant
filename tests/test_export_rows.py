@@ -74,9 +74,9 @@ def test_a_run_stands_only_by_what_the_export_says_now():
 
 def test_someone_back_in_the_export_cannot_be_acknowledged_as_gone():
     register = [member(), member(insead_id="2", name="Synthetic Other")]
-    gone, _ = changed("record", register[1], member())  # the export holds only the first
-    result = reconcile("t", register, [member()], [], {}, as_of=TODAY)
+    result = reconcile("t", register, [member()], [], {}, as_of=TODAY)  # the export holds only the first
     (gone,) = [item for item in result.proposals if item.category == "not-in-export"]
+    assert result.live["not-in-export"] == {key_of(gone)}  # so the open row is kept while they stay away
     assert apply(register, [yes(gone)], [member()])[2][0][-1] == "acknowledged"
     updated, remaining, log = apply(register, [yes(gone)], register)
     assert not log and "export no longer says this" in remaining[0].note
@@ -110,6 +110,15 @@ def test_the_membership_ask_waits_until_register_and_export_both_say_not_a_membe
     assert raised("Inactive", "Inactive") == {"engaged-non-member"}
     assert raised("Inactive", "Active") == {"reactivated"}  # renewed: the renewal is the question
     assert "engaged-non-member" not in raised("Active", "Inactive")  # a lapse nobody has accepted yet
+
+
+def test_an_alias_from_the_export_applies_beside_one_the_register_learned():
+    register = member(aliases=["learned@example.org"])
+    export = member(aliases=["export@example.org"])
+    pending, _ = changed("aliases", register, export)
+    updated, remaining, log = apply([register], [yes(pending)], [export])
+    assert updated[0].aliases == ["export@example.org", "learned@example.org"] and not remaining
+    assert log[0][-1] == "applied"
 
 
 def test_a_yes_a_skill_withdraws_is_logged_and_may_be_asked_again():
