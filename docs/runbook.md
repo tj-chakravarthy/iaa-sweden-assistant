@@ -86,16 +86,19 @@ member look as if they had left INSEAD, so drop the unfiltered one.
 
 The newest export must have the required columns and complete rows. An empty
 or invalid export suspends export changes rather than selecting an older file.
-An undownloadable file also suspends them, because it might be the latest
-export. CSVs may use commas, semicolons or tabs; XLSX data must be on the first
-worksheet.
+So does a newer file that cannot be downloaded, or a newer spreadsheet that
+will not open (cut short in upload, damaged, or in the old `.xls` format),
+because it might be the latest export. The check reports it as `unreadable`.
+Replace it or remove it. CSVs may use commas, semicolons or tabs; XLSX data
+must be on the first worksheet.
 
 A person in two associations has two rows with the same ID. One record is
 kept, from the IAA SWE row if there is one. Rows for one ID that disagree on
 anything else make the export invalid, unless exactly one is the IAA SWE row.
 
-Other files in the inbox do not affect the export. A file the register does not
-recognise is counted as `unknown`, noted at the end of the brief and not used.
+Other files in the inbox do not affect the export. A file that opens and is
+something else is counted as `unknown`, noted at the end of the brief and not
+used.
 Unsupported Drive documents and folders are counted and skipped.
 
 An existing workbook gains the `status_changed` column on the next approved

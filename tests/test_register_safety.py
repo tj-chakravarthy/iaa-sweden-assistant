@@ -12,6 +12,7 @@ from iaa.core.connectors import drive, eventbrite, mailchimp
 from iaa.core.connectors.sheets import Workbook
 from iaa.core.models import Proposal, Source, SourceRecord
 from iaa.core.skill import InboxFile, Run
+from iaa.core.tabular import read_rows
 from iaa.registry import SKILLS
 from iaa.skills.register import run as register_run
 from iaa.skills.register.apply import apply
@@ -193,6 +194,27 @@ def test_other_files_in_the_inbox_do_not_block_the_export(fake_book):
     assert [item.kind for item in run.inbox] == ["insead", "unknown", "unknown", "unknown"]
     proposals, brief = propose(run)
     assert proposals and "not recognised and not used: 3" in brief and "suspended" not in brief
+
+
+def test_a_newer_workbook_that_will_not_open_suspends_the_export(fake_book):
+    run = run_context(fake_book)
+    raw = (FIXTURES / "insead_export.csv").read_bytes()
+    workbook = io.BytesIO()
+    book = openpyxl.Workbook()
+    for row in read_rows(raw):
+        book.active.append(row)
+    book.save(workbook)
+    cut_short = workbook.getvalue()[: len(workbook.getvalue()) // 2]
+    run.inbox = [InboxFile("old.csv", raw, "a", "1", "seen"), InboxFile("new.xlsx", cut_short, "b", "2", "new")]
+    box = _read_sources(run)
+    assert box.export is None and box.export_error and not box.unrecognised
+    assert run.inbox[-1].kind == "unreadable"
+    assert "export changes are suspended" in propose(run)[1]
+    # the other way round, the valid export is the newer one and is used
+    run = run_context(fake_book)
+    run.inbox = [InboxFile("old.xlsx", cut_short, "b", "1", "seen"), InboxFile("new.csv", raw, "a", "2", "new")]
+    box = _read_sources(run)
+    assert box.export and not box.export_error
 
 
 def test_the_inbox_is_parsed_once_however_many_new_records_are_approved(fake_book, monkeypatch):

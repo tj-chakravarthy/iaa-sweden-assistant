@@ -51,7 +51,9 @@ def _read_sources(run: Run, include_records: bool = True) -> _Sources:
         if f.state == "unsupported":
             continue
         kind = sources.classify(f.raw)
-        if kind == "insead":
+        if kind in ("insead", "unreadable"):
+            # A newer file that is the export, or may be, replaces an older one
+            # even if it cannot be used. A later valid export clears this.
             box.export = None
             box.export_error = True
         try:

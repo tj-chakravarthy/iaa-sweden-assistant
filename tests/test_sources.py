@@ -56,7 +56,7 @@ def test_classify_reads_content_not_the_filename():
     assert classify(as_xlsx("payments.csv")) == "payments"
     assert classify(as_xlsx("eventbrite_attendees.csv")) == "eventbrite"
     assert classify(b"%PDF-1.7 minutes of the board meeting") == "unknown"
-    assert classify(b"PK\x03\x04 not really a workbook") == "unknown"
+    assert classify(b"PK\x03\x04 not really a workbook") == "unreadable"
 
 
 def test_xlsx_export_parses_like_the_csv():
@@ -181,3 +181,26 @@ def test_mailchimp_asks_for_no_names_or_merge_fields(monkeypatch):
     fields = asked[0]["fields"].split(",")
     assert not [name for name in fields if "merge_fields" in name or name == "members.stats"]
     assert (record.name, record.emails, record.payload["avg_click_rate"]) == ("", ["reader@example.org"], 0.1)
+
+
+def test_a_spreadsheet_that_will_not_open_is_not_just_another_file():
+    import zipfile
+
+    def archive(*names):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as made:
+            for name in names:
+                made.writestr(name, "<x/>")
+        return buffer.getvalue()
+
+    workbook = as_xlsx("insead_export.csv")
+    old_office = bytes.fromhex("d0cf11e0a1b11ae1") + b"\x00" * 64
+    # may be the newest export: unreadable
+    assert classify(workbook[: len(workbook) // 2]) == "unreadable"  # cut short in upload
+    assert classify(archive("xl/workbook.xml")) == "unreadable"  # a workbook with nothing usable in it
+    assert classify(old_office + "Workbook".encode("utf-16-le")) == "unreadable"  # .xls
+    # read, or recognisably something else: unknown
+    assert classify(archive("word/document.xml")) == "unknown"
+    assert classify(archive("notes.txt")) == "unknown"
+    assert classify(old_office + "WordDocument".encode("utf-16-le")) == "unknown"
+    assert classify(as_xlsx("payments.csv")) == "payments"
