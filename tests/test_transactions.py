@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from iaa import cli
 from iaa.core.config import Settings
 from iaa.core.connectors.sheets import Workbook
-from iaa.core.connectors.transaction import LOCK_TAB
+from iaa.core.connectors.transaction import LOCK_TAB, cells_request
 from iaa.core.models import Proposal
 from iaa.core.skill import Run
 from iaa.registry import SKILLS
@@ -185,3 +185,44 @@ def test_new_opt_out_suppresses_remaining_contact_suggestions(fake_book):
     cli.apply_decisions(run, SKILLS)
     assert book.read("members", Member)[0].do_not_contact
     assert book.proposals()[0].suggested_action.startswith("None:")
+
+
+def test_cells_are_written_as_what_they_are():
+    """Text stays text, whatever it looks like. Only numbers and yes/no are typed."""
+    values = ["0012345", "=1+1", "2026-12-31", "+46", 3, 0.5, True, False, 0, "", None]
+    (row,) = cells_request(7, [values])["updateCells"]["rows"]
+    assert [cell.get("userEnteredValue") for cell in row["values"]] == [
+        {"stringValue": "0012345"},
+        {"stringValue": "=1+1"},
+        {"stringValue": "2026-12-31"},
+        {"stringValue": "+46"},
+        {"numberValue": 3},
+        {"numberValue": 0.5},
+        {"boolValue": True},
+        {"boolValue": False},
+        {"numberValue": 0},
+        None,
+        None,
+    ]
+
+
+def test_awkward_values_survive_a_transaction(fake_book):
+    book = Workbook(fake_book)
+    awkward = Member(
+        insead_id="0012345",
+        name="Synthetic Person",
+        company="=1+1",
+        city="+46",
+        member_expire="2026-12-31",
+        tender_type="750",
+        aliases=["a@example.org", "b@example.org"],
+        paid_direct_years=[2025],
+        events_registered=3,
+        do_not_contact=True,
+    )
+    with book.transaction():
+        book.write("members", Member, [awkward, Member(insead_id="1", name="Synthetic Other")])
+    assert book.read("members", Member)[0] == awkward
+    with book.transaction():
+        book.write("members", Member, [awkward])  # a shorter list leaves no row behind
+    assert book.read("members", Member) == [awkward]

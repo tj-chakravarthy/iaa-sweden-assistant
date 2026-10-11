@@ -166,10 +166,13 @@ def test_values_come_back_as_they_were_written(book):
         do_not_contact=True,
     )
     plain = Member(insead_id="900000", name="Anna Lindqvist")
-    book.write("members", Member, [awkward, plain])
+    with book.transaction():  # the way a run writes
+        book.write("members", Member, [awkward, plain])
     assert book.read("members", Member) == [awkward, plain]
-    book.write("members", Member, [plain])  # a shorter list leaves no row behind
+    with book.transaction():
+        book.write("members", Member, [plain])  # a shorter list leaves no row behind
     assert book.read("members", Member) == [plain]
+    assert not book.lock()
 
 
 def test_what_a_person_types_is_understood(book):
@@ -198,6 +201,10 @@ def test_rows_are_added_below_a_gap(book):
     book.append("runs", RUN_COLS, [["r2", "d", "", "", "", ""]])
     assert [r["file"] for r in book.rows("runs")] == ["a", "c", "d"]
     assert [r[:2] for r in book.sh.worksheet("runs").get_all_values()][2:] == [["", ""], ["r1", "c"], ["r2", "d"]]
+    with book.transaction():  # the same in a run's transaction, which rewrites the tab
+        book.append("runs", RUN_COLS, [["r3", "e", "", "", "", ""]])
+    assert [r["file"] for r in book.rows("runs")] == ["a", "c", "d", "e"]
+    assert [r[:2] for r in book.sh.worksheet("runs").get_all_values()][2] == ["", ""]
 
 
 def test_a_dry_run_leaves_no_trace(book):
