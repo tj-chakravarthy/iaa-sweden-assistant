@@ -161,3 +161,23 @@ def test_drive_requests_are_ones_the_api_accepts(monkeypatch):
     assert "orderBy=modifiedTime" in sent[0] and "folder123" in sent[0]
     assert "supportsAllDrives=true" in svc.files().get_media(fileId="f", supportsAllDrives=True).uri
     assert "mimeType=text%2Fcsv" in svc.files().export_media(fileId="f", mimeType="text/csv").uri
+
+
+def test_mailchimp_asks_for_no_names_or_merge_fields(monkeypatch):
+    from iaa.core.connectors import mailchimp
+
+    asked = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            member = {"id": "s1", "email_address": "Reader@Example.org", "status": "subscribed"}
+            return {"members": [member | {"stats": {"avg_click_rate": 0.1}}], "total_items": 1}
+
+    monkeypatch.setattr(mailchimp.requests, "get", lambda url, **kw: asked.append(kw["params"]) or Response())
+    (record,) = mailchimp.fetch_audience("key-us1", "list")
+    fields = asked[0]["fields"].split(",")
+    assert not [name for name in fields if "merge_fields" in name or name == "members.stats"]
+    assert (record.name, record.emails, record.payload["avg_click_rate"]) == ("", ["reader@example.org"], 0.1)

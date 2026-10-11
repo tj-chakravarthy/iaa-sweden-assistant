@@ -12,6 +12,9 @@ Order of evidence, strongest first:
    a relative (Anna / Hanna). tests/test_match.py covers both.
 6. Otherwise unmatched, or ambiguous when a name maps to several IDs.
 
+Mailchimp subscribers are matched by email only (step 2). The audience holds
+people who are not alumni, and some share a name with one.
+
 No network, no LLM. A person settles an unmatched row by adding the email or
 name to the aliases tab.
 """
@@ -58,12 +61,17 @@ class Matcher:
     def match(self, rec: SourceRecord) -> Match:
         if rec.external_id and rec.external_id in self.by_id and rec.source.value == "insead":
             return Match(insead_id=rec.external_id, method=MatchMethod.INSEAD_ID, confidence=1.0)
+        by_email = self.match_emails(rec)
+        return by_email if by_email.insead_id or by_email.candidates else self.match_name(rec.name)
+
+    def match_emails(self, rec: SourceRecord) -> Match:
+        """Email only. For a source where a shared name says nothing about who someone is."""
         ids = set().union(*(self.email_index.get(norm_email(email), set()) for email in rec.emails))
         if len(ids) > 1:
             return Match(insead_id=None, method=MatchMethod.AMBIGUOUS, confidence=0.5, candidates=sorted(ids))
         if ids:
             return Match(insead_id=next(iter(ids)), method=MatchMethod.EMAIL, confidence=1.0)
-        return self.match_name(rec.name)
+        return Match(insead_id=None, method=MatchMethod.UNMATCHED)
 
     def match_name(self, name: str) -> Match:
         n = norm_name(name)

@@ -241,8 +241,10 @@ def reconcile(
     base = _basis(current, new_export)
     base_by_id = {m.insead_id: m for m in base}
     matcher = Matcher(base, aliases)
-    matches = [(r, matcher.match(r)) for r in records]
+    matches = [(r, matcher.match_emails(r) if r.source == Source.MAILCHIMP else matcher.match(r)) for r in records]
     engaged: set[str] = set()
+    engaged_by: dict[str, set[str]] = defaultdict(set)
+    by_email: dict[str, set[str]] = defaultdict(set)  # addresses learned from a record matched by email
     metrics = {
         member.insead_id: {
             "paid_direct_years": set(member.paid_direct_years),
@@ -261,12 +263,14 @@ def reconcile(
     for r, mt in matches:
         if mt.insead_id and r.source in (Source.EVENTBRITE, Source.SIGNUP):
             engaged.add(mt.insead_id)
+            engaged_by[mt.insead_id].add(r.source.value)
         if mt.insead_id:
             values = metrics[mt.insead_id]
             member = base_by_id[mt.insead_id]
-            values["aliases"].update(
-                email for email in r.emails if email and email not in {member.email_preferred, member.email_insead}
-            )
+            learned = {e for e in r.emails if e and e not in {member.email_preferred, member.email_insead}}
+            values["aliases"].update(learned)
+            if mt.method == MatchMethod.EMAIL:
+                by_email[mt.insead_id].update(learned)
             if r.source == Source.PAYMENTS and r.date:
                 values["paid_direct_years"].add(r.date.year)
             if r.source == Source.EVENTBRITE:
@@ -280,6 +284,7 @@ def reconcile(
                 )
             if r.source == Source.MAILCHIMP and r.status == "subscribed" and (r.payload.get("avg_click_rate") or 0) > 0:
                 engaged.add(mt.insead_id)
+                engaged_by[mt.insead_id].add(r.source.value)
         if r.source == Source.PAYMENTS:
             paid = f"{r.date} {r.payload.get('amount')} SEK via {r.status}"
             if mt.insead_id is None and mt.candidates:
@@ -347,14 +352,17 @@ def reconcile(
     for m in base:
         changes: dict[str, list[str]] = {}
         if m.insead_id in engaged and m.status != "Active" and m.segment != "engaged-non-member":
+            via = engaged_by[m.insead_id]
+            signs = ["registered for events"] if via - {Source.MAILCHIMP.value} else []
+            signs += ["clicks in newsletters"] if Source.MAILCHIMP.value in via else []
             propose(
                 subject_id=m.insead_id,
                 subject=m.name,
                 field="segment",
                 old=m.segment,
                 new="engaged-non-member",
-                reason="registered for events, not a paying member",
-                source="eventbrite",
+                reason=" and ".join(signs) + ", not a paying member",
+                source=", ".join(sorted(via)),
                 category="engaged-non-member",
                 suggested_action=NO_CONTACT if m.do_not_contact else "Membership ask",
             )
@@ -371,17 +379,22 @@ def reconcile(
             if name != "aliases":
                 changes[name] = [previous, target]
                 continue
-            # an address ties a person to a record, so it keeps a row of its own
+            # An address ties a person to a record, so it keeps a row of its own.
+            # One that came with a name match only may be someone else's.
+            unconfirmed = value - set(m.aliases) - by_email[m.insead_id]
             propose(
                 subject_id=m.insead_id,
                 subject=m.name,
                 field=name,
                 old=previous,
                 new=target,
-                reason="matched source records",
+                reason="address on a record matched by name only"
+                if unconfirmed
+                else "second address on a record matched by email",
                 source="register",
+                confidence=0.8 if unconfirmed else 1.0,
                 category="alias-update",
-                suggested_action="Accept",
+                suggested_action="Confirm it is the same person" if unconfirmed else "Accept",
             )
         if changes and m.insead_id in by_id:  # members not in the register yet get theirs once added
             derived[m.insead_id] = changes

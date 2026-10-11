@@ -1,13 +1,16 @@
 import difflib
+from datetime import date
 from pathlib import Path
 
 from iaa.core.models import Source, SourceRecord
 from iaa.core.normalize import norm_name
 from iaa.skills.register.match import FUZZY_CUTOFF, Matcher
 from iaa.skills.register.models import MatchMethod, Member
+from iaa.skills.register.reconcile import reconcile
 from iaa.skills.register.sources import parse_attendees_csv, parse_insead_export, parse_payments_csv
 
 FX = Path(__file__).parent / "fixtures"
+AS_OF = date(2026, 11, 1)
 
 
 def members():
@@ -110,3 +113,53 @@ def test_payments_parse_and_match():
     results = [m.match(p) for p in pay]
     assert sum(r.insead_id is not None for r in results) == 4
     assert results[3].method == MatchMethod.UNMATCHED  # "Nobody Known"
+
+
+def subscriber(email, name=""):
+    return SourceRecord(
+        source=Source.MAILCHIMP,
+        external_id="s1",
+        emails=[email],
+        name=name,
+        status="subscribed",
+        payload={"avg_click_rate": 0.2},
+    )
+
+
+def test_mailchimp_is_matched_by_email_only():
+    """The audience holds people who are not alumni. Sharing a member's name is not a match."""
+    ms = members()
+    lapsed = next(m for m in ms if m.status == "Inactive")
+    stranger = subscriber("someone.else@example.org", lapsed.name)
+    assert Matcher(ms).match(stranger).insead_id == lapsed.insead_id  # what a name match would have done
+    assert Matcher(ms).match_emails(stranger).method == MatchMethod.UNMATCHED
+    assert (
+        reconcile("t", ms, None, [stranger], {}, as_of=AS_OF).proposals
+        == reconcile("t", ms, None, [], {}, as_of=AS_OF).proposals
+    )
+    # their own address is a match, and the row says what the sign of interest was
+    res = reconcile("t", ms, None, [subscriber(lapsed.email_preferred)], {}, as_of=AS_OF)
+    (ask,) = [p for p in res.proposals if p.category == "engaged-non-member"]
+    assert ask.subject_id == lapsed.insead_id
+    assert (ask.reason, ask.source) == ("clicks in newsletters, not a paying member", "mailchimp")
+
+
+def test_an_address_learned_by_name_is_flagged():
+    ms = members()
+    target = ms[6]
+    header = "Attendee first name,Attendee last name,Attendee email,Ticket type,Event name,Event ID,Barcode number\n"
+    first, last = target.name.rsplit(" ", 1)
+    by_name = parse_attendees_csv(
+        (header + f"{first},{last},unknown.address@example.org,INSEAD Alumni ticket,X,1,b1\n").encode()
+    )
+    (row,) = [p for p in reconcile("t", ms, None, by_name, {}, as_of=AS_OF).proposals if p.category == "alias-update"]
+    assert row.suggested_action == "Confirm it is the same person" and "name only" in row.reason
+    assert row.confidence < 1
+    # a record that carries a known address and a new one is not in doubt
+    by_email = [
+        SourceRecord(
+            source=Source.SIGNUP, name="", emails=[target.email_preferred, "second.address@example.org"], status=""
+        )
+    ]
+    (row,) = [p for p in reconcile("t", ms, None, by_email, {}, as_of=AS_OF).proposals if p.category == "alias-update"]
+    assert (row.suggested_action, row.confidence) == ("Accept", 1.0)

@@ -25,9 +25,14 @@ event, an unchecked ticket and evidence that check-in was used for that event.
 Counts cover the event records available in the inbox and API, rather than a
 fixed reporting window. Removing files can lower proposed counts.
 
-Mailchimp is read when both audience settings are supplied. A subscribed
-member with a positive click rate is engaged. Opens are not used. Reading
-Mailchimp never sends a message or changes a subscription.
+Mailchimp is read when both audience settings are supplied. Subscribers are
+matched by email only, and only the address, status and click rate are
+requested. A subscribed member with a positive click rate is engaged. Opens
+are not used. Reading Mailchimp never sends a message or changes a
+subscription.
+
+An address learned from a record that matched by name only is proposed with
+"Confirm it is the same person". It may belong to someone else with that name.
 
 `lapsed-since-previous` means a status change since the start of the previous
 calendar month. Old rows without `status_changed` are reported as lapsed.

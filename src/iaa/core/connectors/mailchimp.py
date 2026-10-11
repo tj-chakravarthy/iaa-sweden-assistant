@@ -2,6 +2,10 @@
 
 Use clicks as the engagement signal. Apple Mail Privacy Protection inflates
 opens. API key from the association's Mailchimp account.
+
+Only the address, the status and the click rate are requested. Names and the
+other merge fields (which can hold an address, a phone number or a birthday)
+are not.
 """
 
 from __future__ import annotations
@@ -10,6 +14,8 @@ import requests
 
 from ..models import Source, SourceRecord
 from ..normalize import norm_email
+
+FIELDS = "members.id,members.email_address,members.status,members.stats.avg_click_rate,members.last_changed,total_items"
 
 
 def fetch_audience(api_key: str, list_id: str) -> list[SourceRecord]:
@@ -24,20 +30,18 @@ def fetch_audience(api_key: str, list_id: str) -> list[SourceRecord]:
             params={
                 "count": count,
                 "offset": offset,
-                "fields": "members.id,members.email_address,members.status,members.merge_fields,members.stats,members.last_changed,total_items",
+                "fields": FIELDS,
             },
             timeout=30,
         )
         r.raise_for_status()
         data = r.json()
         for m in data.get("members", []):
-            mf = m.get("merge_fields", {})
             out.append(
                 SourceRecord(
                     source=Source.MAILCHIMP,
                     external_id=m["id"],
                     emails=[norm_email(m["email_address"])],
-                    name=f"{mf.get('FNAME', '')} {mf.get('LNAME', '')}".strip(),
                     status=m.get("status", ""),
                     payload={
                         "avg_click_rate": m.get("stats", {}).get("avg_click_rate"),
