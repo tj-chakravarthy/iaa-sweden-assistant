@@ -37,8 +37,18 @@ def render(run_date: date, agg: dict, llm: LLMClient | None = None) -> str:
         L += ["", "| Event | Registered | Alumni | Attended |", "|---|---|---|---|"]
         for ev, c in agg["events"].items():
             L.append(f"| {ev} | {c.get('registered', 0)} | {c.get('matched', 0)} | {c.get('attended', '-')} |")
+    # The queue as it stands after this run, or only this run's rows if the tab was not read.
+    queue = agg.get("review") or {"new": sum(agg["proposals_by_category"].values())}
+    waiting = queue.get("by_category", agg["proposals_by_category"])
     L += ["", "## For review (proposals tab)", ""]
-    L += [f"- {v} x {k}" for k, v in sorted(agg["proposals_by_category"].items(), key=lambda x: -x[1])]
+    L.append(f"- New this run: {queue['new']}")
+    if "open" in queue:
+        L.append(f"- Open from earlier runs: {queue['open']}")
+        L.append(f"- Decided, applied on the next run: {queue['decided']}")
+        L.append(f"- Approved but not applicable (see the note column): {queue['blocked']}")
+    if waiting:
+        L += ["", "By category:"]
+    L += [f"- {v} x {k}" for k, v in sorted(waiting.items(), key=lambda x: -x[1])]
     if llm:
         counts = {
             "records": agg["records"],
@@ -49,7 +59,12 @@ def render(run_date: date, agg: dict, llm: LLMClient | None = None) -> str:
                 "registered": sum(event.get("registered", 0) for event in agg["events"].values()),
                 "attended": sum(event.get("attended", 0) for event in agg["events"].values()),
             },
-            "proposals": sum(agg["proposals_by_category"].values()),
+            "proposals": {
+                "total": sum(waiting.values()),
+                "new": queue["new"],
+                "open": queue.get("open", 0),
+                "blocked": queue.get("blocked", 0),
+            },
         }
         try:
             summary = llm.summarize(SUMMARY_PROMPT, counts)

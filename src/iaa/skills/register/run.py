@@ -7,11 +7,13 @@ produced.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
 from ...core.models import Proposal, SourceRecord
+from ...core.policy import approved, rejected
 from ...core.proposals import SETTLED, key_of, proposal_key
 from ...core.skill import Run, Skill
 from . import sources
@@ -102,6 +104,20 @@ def _aliases(run: Run) -> dict[str, set[str]]:
     return out
 
 
+def _queue(new: list[Proposal], existing: list[Proposal], live: dict[str, set[str]]) -> dict:
+    """What waits in the proposals tab once this run has added its rows. Counts only."""
+    kept = [p for p in existing if p.kind == KIND and not _out_of_date(p, live)]
+    decided = [p for p in kept if not p.note and (approved(p) or rejected(p))]
+    blocked = [p for p in kept if p.note]
+    return {
+        "new": len(new),
+        "open": len(kept) - len(decided) - len(blocked),
+        "decided": len(decided),
+        "blocked": len(blocked),
+        "by_category": dict(Counter(p.category for p in [*kept, *new])),
+    }
+
+
 def propose(run: Run) -> tuple[list[Proposal], str]:
     box = _sources(run)
     declined = {
@@ -111,6 +127,7 @@ def propose(run: Run) -> tuple[list[Proposal], str]:
     }
     res = reconcile(run.run_id, _members(run), box.export, box.records, _aliases(run), run.known(), run.today, declined)
     run.memo["register.live"] = res.live  # for refresh, which runs after this
+    res.aggregates["review"] = _queue(res.proposals, run.book.proposals(), res.live)
     unavailable = False
     try:
         llm = run.llm

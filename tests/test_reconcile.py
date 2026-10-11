@@ -177,3 +177,21 @@ def test_optional_summary_receives_only_fixed_count_labels_and_can_fail():
     result = reconcile("test", members, None, records, {}, as_of=AS_OF)
     text = render(AS_OF, result.aggregates, Summary())
     assert "Optional summary unavailable" in text
+
+
+def test_the_summary_is_told_about_the_whole_queue_in_fixed_labels():
+    from iaa.core.llm.base import prompt
+
+    sent = []
+
+    class Summary:
+        def summarize(self, instructions, counts):
+            sent.append(counts)
+            return prompt(instructions, counts) and "ok"  # prompt() refuses any label that is not approved
+
+    members, records = load()
+    result = reconcile("test", members, None, records, {}, as_of=AS_OF)
+    result.aggregates["review"] = {"new": 2, "open": 5, "decided": 1, "blocked": 3, "by_category": {"lapsed": 11}}
+    text = render(AS_OF, result.aggregates, Summary())
+    assert sent[0]["proposals"] == {"total": 11, "new": 2, "open": 5, "blocked": 3}
+    assert "- Open from earlier runs: 5" in text and "- 11 x lapsed" in text

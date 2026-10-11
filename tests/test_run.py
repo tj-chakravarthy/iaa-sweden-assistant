@@ -202,6 +202,33 @@ def test_an_undecided_derived_row_is_replaced_not_piled_up(book):
     assert next(m for m in members(book) if m.insead_id == "900000").events_registered == 3
 
 
+def brief(book):
+    (tab,) = [tab for name, tab in book.tabs.items() if name.startswith("brief_register_")]
+    return "\n".join(str(row[0]) for row in tab.cells if row)
+
+
+def test_the_brief_reports_what_is_still_waiting(book):
+    out = run("register", "reconcile")
+    assert "proposals tab now holds: 36" in out
+    assert "- New this run: 36" in brief(book) and "- Open from earlier runs: 0" in brief(book)
+
+    out = run("register", "reconcile")  # nobody has decided anything yet
+    assert "new proposals: 0" in out and "proposals tab now holds: 36" in out
+    text = brief(book)
+    assert "- New this run: 0" in text and "- Open from earlier runs: 36" in text
+    assert "- 30 x new-record" in text and "- 1 x engaged-non-member" in text
+
+    decide(book, lambda category: "yes" if category == "new-record" else "")
+    run("register", "reconcile")
+    assert "- Decided, applied on the next run: 30" in brief(book) and "- Open from earlier runs: 6" in brief(book)
+
+    del book.inbox["Download (3).csv"]  # the approved records can no longer be loaded
+    run("register", "apply")
+    run("register", "reconcile")
+    assert "- Approved but not applicable (see the note column): 30" in brief(book)
+    assert_counts_only(brief(book).split("## For review")[1], book)
+
+
 def test_a_dry_run_cannot_write_even_if_a_skill_tries(book):
     with pytest.raises(RuntimeError, match="dry run"):
         Workbook(book, read_only=True).write("members", Member, [])

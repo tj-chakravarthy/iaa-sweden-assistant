@@ -44,6 +44,9 @@ COUNT_LABELS = frozenset(
         "attended",
         "unknown",
         "proposals",
+        "new",
+        "open",
+        "blocked",
         "expiring",
         "share",
     }

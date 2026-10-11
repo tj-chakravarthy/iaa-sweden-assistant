@@ -106,11 +106,14 @@ def _raise_proposals(run: Run, skills: Sequence[Skill], details: bool) -> None:
             if refreshed != existing:
                 run.book.write_proposals(refreshed)
             run.book.append_proposals(proposals)
+            waiting = len(refreshed) + len(proposals)
             if brief:
                 run.book.write_text(f"brief_{s.name}_{run.today:%Y-%m}", brief)
         typer.echo(f"{s.name}, run {run.run_id}" + (" (dry run, nothing written)" if run.dry_run else ""))
         for line in summary(proposals):
             typer.echo(line)
+        if not run.dry_run:
+            typer.echo(f"proposals tab now holds: {waiting}")
         if details:
             for p in proposals:
                 typer.echo(f"{p.category:28} {p.subject:30} {p.field}: {p.old!r} -> {p.new!r}  ({p.reason})")
