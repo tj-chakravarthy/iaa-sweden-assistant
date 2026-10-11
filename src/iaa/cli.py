@@ -159,14 +159,19 @@ def unlock(yes: bool = typer.Option(False, "--yes", help="Remove the lock")):
     """Show the write lock an interrupted run left behind. Remove it with --yes."""
     book = _open().book
     lock = book.lock()
-    if not lock:
+    if lock is None:
         typer.echo("no lock")
         return
-    typer.echo(f"lock {lock.get('state', '?')}, started {lock.get('started', '?')}")
-    if lock.get("state") == "committed":
+    state = lock.get("state")
+    if state == "committed":
+        typer.echo(f"lock committed, started {lock.get('started', '?')}")
         typer.echo("that run's changes were written")
-    else:
+    elif state == "locked":
+        typer.echo(f"lock locked, started {lock.get('started', '?')}")
         typer.echo("that run did not confirm its write: check members, proposals and changelog")
+    else:
+        typer.echo("lock tab present, but what it said has been changed or cleared")
+        typer.echo("it is not known whether that run wrote: check members, proposals and changelog")
     if not yes:
         typer.echo("if no run is in progress, remove it with: iaa unlock --yes")
         return

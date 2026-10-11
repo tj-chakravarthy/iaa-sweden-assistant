@@ -81,8 +81,16 @@ class Workbook:
             self._transaction = None
             transaction.release()
 
-    def lock(self) -> dict[str, str]:
-        """The write lock as owner, state and started. {} if there is none."""
+    def lock(self) -> dict[str, str] | None:
+        """The write lock as owner, state and started. None if there is no lock tab.
+
+        The tab is the lock, not what is written in it: a lock tab someone has
+        emptied still stops a run, and comes back as {}.
+        """
+        try:
+            self.sh.worksheet(LOCK_TAB)
+        except gspread.WorksheetNotFound:
+            return None
         return {str(row[0]): str(row[1]) for row in self._raw_values(LOCK_TAB) if len(row) > 1}
 
     def unlock(self) -> None:

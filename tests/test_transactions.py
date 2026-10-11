@@ -125,7 +125,7 @@ def test_the_lock_adds_one_tab_and_no_protection(fake_book):
         assert book.lock()["state"] == "locked"
     kinds = {next(iter(request)) for body in fake_book.batches for request in body["requests"]}
     assert kinds == {"addSheet", "updateCells", "deleteSheet"}
-    assert not book.lock()
+    assert book.lock() is None
 
 
 def test_an_edit_during_the_run_is_detected_before_commit(fake_book):
@@ -159,6 +159,32 @@ def test_unlock_shows_the_lock_and_removes_it_only_when_told(fake_book, monkeypa
     assert removed.exit_code == 0 and "lock removed" in removed.output and LOCK_TAB not in fake_book.tabs
     assert "no lock" in CliRunner().invoke(cli.app, ["unlock"]).output
     cli.apply_decisions(run, SKILLS)  # the interrupted decision is carried out once
+    assert len(book.rows("changelog")) == 1 and not book.proposals()
+
+
+def test_a_lock_tab_someone_emptied_is_still_a_lock_and_can_be_removed(fake_book, monkeypatch):
+    book, run = setup(fake_book)
+    original = fake_book.batch_update
+
+    def timeout(body):
+        if data_commit(body):
+            raise TimeoutError("synthetic timeout")
+        return original(body)
+
+    monkeypatch.setattr(fake_book, "batch_update", timeout)
+    with pytest.raises(TimeoutError):
+        cli.apply_decisions(run, SKILLS)
+    monkeypatch.setattr(fake_book, "batch_update", original)
+    fake_book.tabs[LOCK_TAB].cells = []  # someone cleared the tab
+    assert book.lock() == {}
+    with pytest.raises(RuntimeError, match="locked"):
+        cli.apply_decisions(run, SKILLS)
+    monkeypatch.setattr(cli, "_open", lambda dry_run=False: run)
+    shown = CliRunner().invoke(cli.app, ["unlock"])
+    assert "lock tab present" in shown.output and "no lock" not in shown.output and LOCK_TAB in fake_book.tabs
+    removed = CliRunner().invoke(cli.app, ["unlock", "--yes"])
+    assert removed.exit_code == 0 and "lock removed" in removed.output and LOCK_TAB not in fake_book.tabs
+    cli.apply_decisions(run, SKILLS)
     assert len(book.rows("changelog")) == 1 and not book.proposals()
 
 

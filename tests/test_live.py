@@ -172,7 +172,7 @@ def test_values_come_back_as_they_were_written(book):
     with book.transaction():
         book.write("members", Member, [plain])  # a shorter list leaves no row behind
     assert book.read("members", Member) == [plain]
-    assert not book.lock()
+    assert book.lock() is None
 
 
 def test_what_a_person_types_is_understood(book):

@@ -57,6 +57,8 @@ behind. It is never removed automatically.
 2. Run `uv run iaa unlock`. It shows the lock. `committed` means that run's
    whole update was written. `locked` means it was not confirmed: look at
    members, proposals and changelog first. Do not redo changes by hand.
+   If the tab's contents were changed or cleared, it says so. The tab still
+   blocks runs until it is removed.
 3. Run `uv run iaa unlock --yes` to remove it, then run the command again.
    Decisions that were written have left proposals and are not applied twice.
 
