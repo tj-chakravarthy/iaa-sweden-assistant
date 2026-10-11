@@ -75,6 +75,9 @@ class FakeBook:
 
     def __init__(self):
         self.tabs = {}
+        self.protections = {}
+        self.batches = []
+        self.next_id = 1
 
     def worksheet(self, name):
         if name not in self.tabs:
@@ -82,8 +85,70 @@ class FakeBook:
         return self.tabs[name]
 
     def add_worksheet(self, name, rows, cols):
+        if name in self.tabs:
+            raise RuntimeError("duplicate worksheet title")
         self.tabs[name] = FakeTab(rows, cols)
+        self.tabs[name].id = self.next_id
+        self.next_id += 1
         return self.tabs[name]
+
+    def fetch_sheet_metadata(self):
+        return {
+            "sheets": [
+                {
+                    "properties": {
+                        "title": name,
+                        "sheetId": tab.id,
+                        "gridProperties": {"rowCount": tab.row_count, "columnCount": tab.col_count},
+                    },
+                    "protectedRanges": [
+                        value for value in self.protections.values() if value["range"]["sheetId"] == tab.id
+                    ],
+                }
+                for name, tab in self.tabs.items()
+            ]
+        }
+
+    def batch_update(self, body):
+        staged = copy.deepcopy(self)
+        staged.batches.append(body)
+        for request in body["requests"]:
+            if "addSheet" in request:
+                properties = request["addSheet"]["properties"]
+                if any(tab.id == properties["sheetId"] for tab in staged.tabs.values()):
+                    raise RuntimeError("duplicate worksheet id")
+                tab = staged.add_worksheet(
+                    properties["title"],
+                    properties["gridProperties"]["rowCount"],
+                    properties["gridProperties"]["columnCount"],
+                )
+                tab.id = properties["sheetId"]
+            elif "addProtectedRange" in request:
+                protected = request["addProtectedRange"]["protectedRange"]
+                staged.protections[protected["protectedRangeId"]] = protected
+            elif "deleteProtectedRange" in request:
+                del staged.protections[request["deleteProtectedRange"]["protectedRangeId"]]
+            elif "deleteSheet" in request:
+                name = next(name for name, tab in staged.tabs.items() if tab.id == request["deleteSheet"]["sheetId"])
+                del staged.tabs[name]
+            elif "updateSheetProperties" in request:
+                properties = request["updateSheetProperties"]["properties"]
+                tab = next(tab for tab in staged.tabs.values() if tab.id == properties["sheetId"])
+                tab.resize(properties["gridProperties"]["rowCount"], properties["gridProperties"]["columnCount"])
+            elif "updateCells" in request:
+                update = request["updateCells"]
+                tab = next(tab for tab in staged.tabs.values() if tab.id == update["range"]["sheetId"])
+                tab.cells = [
+                    [next(iter(cell.get("userEnteredValue", {}).values()), "") for cell in row["values"]]
+                    for row in update["rows"]
+                ]
+                assert len(tab.cells) <= tab.row_count
+                assert all(len(row) <= tab.col_count for row in tab.cells)
+            else:
+                raise AssertionError("unsupported request")
+        self.tabs, self.protections, self.batches = staged.tabs, staged.protections, staged.batches
+        self.next_id = staged.next_id
+        return {}
 
     def data(self, name):
         return [r for r in self.tabs[name].get_all_values()[1:] if r]

@@ -16,6 +16,7 @@ from __future__ import annotations
 import traceback
 from collections import Counter
 from collections.abc import Sequence
+from contextlib import nullcontext
 from pathlib import Path
 
 import typer
@@ -45,6 +46,12 @@ def _open(dry_run: bool = False) -> Run:
 
 def apply_decisions(run: Run, skills: Sequence[Skill]) -> None:
     """Carry out decided proposals of these skills, log them, take them off the tab."""
+    with run.book.transaction():
+        result = _apply_decisions(run, skills)
+    typer.echo(result)
+
+
+def _apply_decisions(run: Run, skills: Sequence[Skill]) -> str:
     book = run.book
     snapshot = book.proposals()
     refreshed = snapshot
@@ -69,9 +76,11 @@ def apply_decisions(run: Run, skills: Sequence[Skill]) -> None:
         for s in skills:
             if s.kinds & applied:
                 appliers[s.name].commit()
+        for skill in skills:
+            remaining = skill.refresh(run, remaining)
         book.append("changelog", CHANGELOG_COLS, log)
         book.write_proposals(remaining)
-    typer.echo(
+    return (
         f"applied {outcomes['applied']}, acknowledged {outcomes['acknowledged']}, rejected {outcomes['rejected']}; "
         f"{blocked} approved but not applicable (see the note column); {len(remaining)} still open"
     )
@@ -79,6 +88,11 @@ def apply_decisions(run: Run, skills: Sequence[Skill]) -> None:
 
 def raise_proposals(run: Run, skills: Sequence[Skill], details: bool = False) -> None:
     """Each skill reads its sources. Add its proposals to the tab and write its brief."""
+    with nullcontext() if run.dry_run else run.book.transaction():
+        _raise_proposals(run, skills, details)
+
+
+def _raise_proposals(run: Run, skills: Sequence[Skill], details: bool) -> None:
     for s in skills:
         if not run.dry_run:
             existing = run.book.proposals()

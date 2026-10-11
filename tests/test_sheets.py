@@ -133,6 +133,13 @@ def test_other_errors_are_not_retried_and_patience_ends(monkeypatch):
     assert waits == list(PatientClient.WAITS)
 
 
+def test_non_idempotent_posts_are_not_retried(monkeypatch):
+    client, waits = patient(monkeypatch, [api_error(503)])
+    with pytest.raises(gspread.exceptions.APIError):
+        client.request("post", "https://example.invalid")
+    assert waits == []
+
+
 class WireSession:
     """Replaces the network under gspread and records what would be sent."""
 

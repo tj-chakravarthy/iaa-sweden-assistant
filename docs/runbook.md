@@ -25,10 +25,36 @@
   is not raised again. A different change to the same member is.
 - A `yes` that cannot be carried out stays in `proposals` with the reason in
   `note`, and is tried again on each run.
-- New records are copied from the INSEAD export, so the export must still be
-  in the inbox when the `yes` is applied.
-- Do not edit `proposals` while the monthly run is going. If you do, the run
-  stops without writing. Run it again.
+- New records carry a complete minimised snapshot in `new`. Review that
+  snapshot before approving. The export must still match it when applied.
+  Older proposals containing only `new record` must be rejected and replaced
+  by a fresh reconciliation.
+- Existing changes require the current field value to match `old`. Fill in
+  `old` when adding a proposal by hand. A conflict stays open for review.
+- While writing, the assistant creates `_iaa_write_lock` and temporarily
+  protects existing tabs from other editors. Other assistant runs refuse the
+  lock. The spreadsheet owner can override Google's protections and must not
+  edit or remove protections during a run. A final comparison detects earlier
+  owner edits, but cannot guarantee detection of an edit racing the commit.
+- Members, decisions and their changelog entries commit together. A lost
+  response is checked against the transaction marker before any retry.
+
+## Recovering a write lock
+
+A killed run or uncertain network failure can leave `_iaa_write_lock` and
+temporary protections in place. Locks are never expired automatically.
+
+1. Stop every local or workflow writer and confirm none is still running.
+   If a request may still be running on Google's side, wait for it to settle.
+2. Inspect the lock tab. `committed` means the entire staged update reached
+   Sheets. `locked` means completion was not confirmed; inspect the members,
+   proposals and changelog before proceeding. Do not manually replay changes.
+3. As the spreadsheet owner, remove only protected ranges whose description
+   is `iaa lock` followed by that lock's owner token. Leave other protections.
+4. Delete `_iaa_write_lock` and run the command again. Successfully committed
+   decisions have already left proposals and will not be applied again.
+
+Do not clear a lock while a writer might still commit.
 
 ## Telling the assistant who someone is
 
