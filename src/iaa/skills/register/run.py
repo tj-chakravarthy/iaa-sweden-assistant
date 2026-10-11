@@ -43,28 +43,27 @@ def _read_sources(run: Run, include_records: bool = True) -> _Sources:
 
     box = _Sources()
     from_files: list[SourceRecord] = []
-    download_failed = False
+    export_time = ""  # when the export in use was last modified
+    doubtful: list[str] = []  # the same for files that may be the export and could not be used
     for f in run.inbox:  # oldest first, so the newest INSEAD export wins
-        if f.state == "unreadable":
-            download_failed = True  # it might be the newest export
+        if f.state == "unreadable":  # the download failed
+            doubtful.append(f.modified)
             continue
         if f.state == "unsupported":
             continue
         kind = sources.classify(f.raw)
-        if kind in ("insead", "unreadable"):
-            # A newer file that is the export, or may be, replaces an older one
-            # even if it cannot be used. A later valid export clears this.
-            box.export = None
-            box.export_error = True
+        if kind == "unreadable":
+            doubtful.append(f.modified)
         try:
             if kind == "insead":
-                box.export = sources.parse_insead_export(f.raw)
-                box.export_error = False
+                box.export, export_time = sources.parse_insead_export(f.raw), f.modified
             elif kind == "payments" and include_records:
                 box.records += sources.parse_payments_csv(f.raw)
             elif kind == "eventbrite" and include_records:
                 from_files += sources.parse_attendees_csv(f.raw)
         except Exception:  # an unreadable file must not stop the run. It shows in runs and in the counts.
+            if kind == "insead":
+                doubtful.append(f.modified)
             kind += "-unreadable"
         if kind != "unknown":
             f.kind = kind
@@ -72,7 +71,9 @@ def _read_sources(run: Run, include_records: bool = True) -> _Sources:
             # Not this skill's file: another document, or another skill's input.
             # It is reported, and the export in the inbox is still used.
             box.unrecognised += 1
-    if download_failed:
+    # A doubtful file suspends the export unless a valid export is newer than it.
+    # One with no time, or the same time as the export, is taken to be the newer.
+    if any(box.export is None or not modified or modified >= export_time for modified in doubtful):
         box.export, box.export_error = None, True
     from_api: list[SourceRecord] = []
     s = run.settings

@@ -258,6 +258,33 @@ def test_the_inbox_is_parsed_once_however_many_new_records_are_approved(fake_boo
     assert len(calls) == 1
 
 
+def test_a_failed_download_only_matters_if_it_may_be_newer_than_the_export(fake_book):
+    raw = (FIXTURES / "insead_export.csv").read_bytes()
+
+    def sources(*files):
+        run = run_context(fake_book)
+        run.inbox = list(files)
+        return _read_sources(run), run.inbox
+
+    def failed(modified):
+        return InboxFile("failed.csv", b"", "", modified, "unreadable")
+
+    def export(modified):
+        return InboxFile("export.csv", raw, "a", modified, "new")
+
+    box, inbox = sources(failed("1"), export("2"))  # an old failure, then a valid export
+    assert box.export and not box.export_error
+    assert inbox[0].state == "unreadable"  # still reported
+    for files in (
+        (export("1"), failed("2")),  # the failure is the newer file
+        (failed("2"), export("2")),  # same time: it cannot be told which is newer
+        (failed(""), export("2")),  # no time on the failed file
+        (failed("2"), export("")),  # no time on the export
+    ):
+        box, _ = sources(*files)
+        assert box.export is None and box.export_error
+
+
 def test_download_failure_is_recorded_and_blocks_stale_export(fake_book, monkeypatch):
     run = run_context(fake_book)
     monkeypatch.setattr(

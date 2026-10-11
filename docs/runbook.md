@@ -95,7 +95,8 @@ or invalid export suspends export changes rather than selecting an older file.
 So does a newer file that cannot be downloaded, or a newer spreadsheet that
 will not open (cut short in upload, damaged, or in the old `.xls` format),
 because it might be the latest export. The check reports it as `unreadable`.
-Replace it or remove it. CSVs may use commas, semicolons or tabs; XLSX data
+Replace it or remove it. Once a valid export is newer than the bad file, the
+export is used again. CSVs may use commas, semicolons or tabs; XLSX data
 must be on the first worksheet.
 
 A person in two associations has two rows with the same ID. One record is
