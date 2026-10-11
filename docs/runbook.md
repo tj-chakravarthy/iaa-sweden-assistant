@@ -120,8 +120,10 @@ the proposals or changelog headers; a mismatched append is refused.
 - A date typed into `proposals` is read in the spreadsheet's own format. Keep
   the spreadsheet's locale as Sweden (File, Settings) so it reads as
   `2026-12-31`. With a day-first locale, `03/04/2027` would be read as 4 March.
-- Do not add columns to `proposals` or `members`. The run rewrites those tabs
-  and would drop them.
+- Do not add, rename or remove columns in `proposals` or `members`. A run
+  that finds other headings than its own stops before reading or writing
+  anything, so that no column's data is lost. Put the headings back and run
+  again.
 - Never edit `members` by hand. Add a row to `proposals`, write `yes` and let
   the run apply it, so the changelog stays complete.
 

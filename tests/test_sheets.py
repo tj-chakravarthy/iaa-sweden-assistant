@@ -3,7 +3,16 @@
 import gspread
 import pytest
 
-from iaa.core.connectors.sheets import PROPOSAL_COLS, PatientClient, Workbook, _cell, coerce, grid, records
+from iaa.core.connectors.sheets import (
+    PROPOSAL_COLS,
+    PatientClient,
+    SchemaError,
+    Workbook,
+    _cell,
+    coerce,
+    grid,
+    records,
+)
 from iaa.core.models import Proposal
 from iaa.skills.register.models import Member
 
@@ -173,3 +182,47 @@ def test_what_goes_on_the_wire():
     assert grew[0] == "POST" and '"rowCount": 5' in str(grew[3]).replace("'", '"')  # the tab had 4 rows
     assert put[0] == "PUT" and put[1].endswith("%21A5")  # below the gap, not into it
     assert put[2]["valueInputOption"] == "RAW" and put[3]["values"] == [["r2", "=d"]]
+
+
+def members_tab(fake_book, **fields):
+    book = Workbook(fake_book)
+    book.write("members", Member, [Member(insead_id="1", name="Synthetic Person", **fields)])
+    return book, fake_book.tabs["members"].cells
+
+
+def test_a_renamed_column_is_refused_not_read_as_blank(fake_book):
+    book, cells = members_tab(fake_book, do_not_contact=True)
+    cells[0][cells[0].index("do_not_contact")] = "do_not_contcat"
+    with pytest.raises(SchemaError, match="members.*not expected: do_not_contcat.*missing: do_not_contact"):
+        book.read("members", Member)
+
+
+def test_extra_repeated_and_unnamed_columns_are_refused(fake_book):
+    book, cells = members_tab(fake_book)
+    cells[0].append("comment")
+    cells[1].append("a remark someone typed")
+    with pytest.raises(SchemaError, match="not expected: comment"):
+        book.read("members", Member)
+    cells[0][-1] = ""
+    with pytest.raises(SchemaError, match="without a heading"):
+        book.read("members", Member)
+    cells[0][-1] = "company"
+    with pytest.raises(SchemaError, match="repeated: company"):
+        book.read("members", Member)
+    cells[0].pop(), cells[1].pop()
+    assert book.read("members", Member)[0].insead_id == "1"
+    with pytest.raises(SchemaError, match="proposals"):
+        book.write_proposals([])
+        fake_book.tabs["proposals"].cells[0].append("comment")
+        book.proposals()
+
+
+def test_a_column_added_later_may_be_absent_when_named(fake_book):
+    book, cells = members_tab(fake_book, status="Active")
+    gone = cells[0].index("status_changed")
+    for row in cells:
+        del row[gone]
+    with pytest.raises(SchemaError, match="missing: status_changed"):
+        book.read("members", Member)
+    (member,) = book.read("members", Member, optional=("status_changed",))
+    assert (member.status, member.status_changed) == ("Active", "")

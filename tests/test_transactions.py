@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 
 from iaa import cli
 from iaa.core.config import Settings
-from iaa.core.connectors.sheets import Workbook
+from iaa.core.connectors.sheets import SchemaError, Workbook
 from iaa.core.connectors.transaction import LOCK_TAB, cells_request
 from iaa.core.models import Proposal
 from iaa.core.skill import Run
@@ -252,3 +252,34 @@ def test_awkward_values_survive_a_transaction(fake_book):
     with book.transaction():
         book.write("members", Member, [awkward])  # a shorter list leaves no row behind
     assert book.read("members", Member) == [awkward]
+
+
+def test_a_damaged_members_header_stops_the_run_and_changes_nothing(fake_book):
+    """Someone mistypes a heading. An approved change to another field must not go through
+    and write the member back without the opt-out."""
+    book, run = setup(fake_book)
+    book.write(
+        "members", Member, [Member(insead_id="1", name="Synthetic Person", status="Active", do_not_contact=True)]
+    )
+    header = fake_book.tabs["members"].cells[0]
+    header[header.index("do_not_contact")] = "do_not_contcat"
+    before = {name: copy.deepcopy(tab.cells) for name, tab in fake_book.tabs.items()}
+    with pytest.raises(SchemaError, match="members"):
+        cli.apply_decisions(run, SKILLS)
+    assert {name: tab.cells for name, tab in fake_book.tabs.items()} == before
+    header = fake_book.tabs["members"].cells[0]
+    header[header.index("do_not_contcat")] = "do_not_contact"
+    cli.apply_decisions(run, SKILLS)
+    (member,) = book.read("members", Member)
+    assert member.status == "Inactive" and member.do_not_contact
+
+
+def test_a_members_tab_from_before_status_changed_still_works(fake_book):
+    book, run = setup(fake_book)
+    cells = fake_book.tabs["members"].cells
+    gone = cells[0].index("status_changed")
+    for row in cells:
+        del row[gone]
+    cli.apply_decisions(run, SKILLS)
+    (member,) = book.read("members", Member)
+    assert member.status == "Inactive" and member.status_changed

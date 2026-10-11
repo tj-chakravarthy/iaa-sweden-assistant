@@ -12,6 +12,7 @@ from ...core.normalize import parse_date
 
 KIND = "register-change"  # the one kind of proposal this skill raises and carries out
 HOME_NAA = "IAA SWE"  # this association, as the NAA / IAA column spells it
+ADDED_LATER = ("status_changed",)  # columns a members tab made earlier may lack
 
 
 class MatchMethod(StrEnum):

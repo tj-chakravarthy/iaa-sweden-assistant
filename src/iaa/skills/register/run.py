@@ -17,7 +17,7 @@ from ...core.skill import Run, Skill
 from . import sources
 from .apply import apply, carry_out
 from .brief import render
-from .models import KIND, Member
+from .models import ADDED_LATER, KIND, Member
 from .reconcile import NEW_RECORD, reconcile
 
 FIXTURES = Path(__file__).resolve().parents[4] / "tests" / "fixtures"
@@ -85,7 +85,7 @@ def _read_sources(run: Run, include_records: bool = True) -> _Sources:
 
 
 def _members(run: Run) -> list[Member]:
-    members = run.book.read("members", Member)
+    members = run.book.read("members", Member, optional=ADDED_LATER)
     if len({member.insead_id for member in members}) != len(members):
         raise ValueError("duplicate member IDs")
     return members

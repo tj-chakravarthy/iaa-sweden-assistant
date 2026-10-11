@@ -18,6 +18,7 @@ Notes:
 - append works out the next free row itself. The append in Sheets stops at
   the first blank row and would overwrite rows below it.
 - read_only refuses every write. Dry runs use it.
+- A tab read as a model must have that model's columns (SchemaError).
 - 429 and 5xx responses are retried (PatientClient).
 """
 
@@ -37,6 +38,10 @@ from ..policy import assert_known_kind, assert_minimised
 from .transaction import LOCK_TAB, Transaction
 
 PROPOSAL_COLS = list(Proposal.model_fields)
+
+
+class SchemaError(RuntimeError):
+    """A tab's header row is not what the code writes. Nothing is read from it or written to it."""
 
 
 class PatientClient(HTTPClient):
@@ -129,10 +134,12 @@ class Workbook:
         ws.update(values=grid(rows, height, width), range_name="A1")
 
     # ---- any tab ----
+    def _values(self, name: str) -> list[list[Any]]:
+        return self._transaction.read(name) if self._transaction else self._raw_values(name)
+
     def rows(self, name: str) -> list[dict[str, Any]]:
         """The tab as dicts keyed by header. [] if the tab does not exist."""
-        values = self._transaction.read(name) if self._transaction else self._raw_values(name)
-        return records(values)
+        return records(self._values(name))
 
     def _raw_values(self, name: str) -> list[list[Any]]:
         try:
@@ -145,9 +152,18 @@ class Workbook:
         )
         return [] if values == [[]] else values
 
-    def read[M: BaseModel](self, name: str, model: type[M]) -> list[M]:
-        """The tab as model objects."""
-        return [model(**coerce(model, r)) for r in self.rows(name)]
+    def read[M: BaseModel](self, name: str, model: type[M], optional: tuple[str, ...] = ()) -> list[M]:
+        """The tab as model objects. Its columns must be the model's fields.
+
+        A renamed column would read as blank and an extra one would be dropped,
+        and the next write would make that permanent. So either is refused.
+        Columns in optional may be absent, for a sheet made before they existed.
+        """
+        values = self._values(name)
+        if not values:
+            return []
+        check_header(name, values, list(model.model_fields), optional)
+        return [model(**coerce(model, r)) for r in records(values)]
 
     def write(self, name: str, model: type[BaseModel], objects: list[BaseModel]) -> None:
         """Replace the tab with objects, one row each."""
@@ -220,6 +236,21 @@ def _cell(v: Any) -> Any:
 def grid(rows: list[list[Any]], height: int, width: int) -> list[list[Any]]:
     """rows padded with blanks to the full size of the tab, so one write replaces everything."""
     return [list(r) + [""] * (width - len(r)) for r in rows] + [[""] * width for _ in range(height - len(rows))]
+
+
+def check_header(name: str, values: list[list[Any]], cols: list[str], optional: tuple[str, ...] = ()) -> None:
+    header = [str(h).strip() for h in values[0]]
+    named = [h for h in header if h]
+    problems = {
+        "repeated": sorted({h for h in named if named.count(h) > 1}),
+        "not expected": sorted(set(named) - set(cols)),
+        "missing": sorted(set(cols) - set(named) - set(optional)),
+    }
+    if any(str(v).strip() for row in values[1:] for i, v in enumerate(row) if i >= len(header) or not header[i]):
+        problems["without a heading"] = ["some cells"]
+    if any(problems.values()):
+        found = "; ".join(f"{kind}: {', '.join(names)}" for kind, names in problems.items() if names)
+        raise SchemaError(f"the {name} tab's columns are wrong ({found}); nothing was read or written")
 
 
 def records(values: list[list[Any]]) -> list[dict[str, Any]]:
