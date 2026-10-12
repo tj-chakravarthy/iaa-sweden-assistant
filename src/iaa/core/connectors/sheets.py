@@ -48,11 +48,13 @@ class SchemaError(RuntimeError):
 class PatientClient(HTTPClient):
     """Retries reads and fixed-range writes on 429 and 5xx.
 
-    The Sheets quota is per minute, so the waits add up to about two minutes.
+    The Sheets quota is per minute. Once it is used up, reads are refused for
+    about a minute, and now and then for a few seconds more after that. So the
+    waits grow to half a minute and then stay there, about four minutes in all.
     Batch mutations recover through the transaction marker.
     """
 
-    WAITS = (2, 4, 8, 16, 32, 64)  # seconds
+    WAITS = (2, 4, 8, 16, 32, 32, 32, 32, 32, 32, 32)  # seconds
     sleep = staticmethod(time.sleep)
 
     def request(self, *args: Any, **kwargs: Any):

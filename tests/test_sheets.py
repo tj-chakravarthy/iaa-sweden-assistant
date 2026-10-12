@@ -136,10 +136,12 @@ def test_other_errors_are_not_retried_and_patience_ends(monkeypatch):
     with pytest.raises(gspread.exceptions.APIError):
         client.request("get", "https://example.invalid")
     assert waits == []
-    client, waits = patient(monkeypatch, [api_error(429)] * 7)
+    client, waits = patient(monkeypatch, [api_error(429)] * (len(PatientClient.WAITS) + 1))
     with pytest.raises(gspread.exceptions.APIError):
         client.request("get", "https://example.invalid")
     assert waits == list(PatientClient.WAITS)
+    # a refusal that outlasts the quota's minute by a little is still waited out
+    assert sum(waits) > 180 and sum(wait >= 30 for wait in waits) >= 5 and max(waits) < 60
 
 
 def test_non_idempotent_posts_are_not_retried(monkeypatch):
