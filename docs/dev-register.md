@@ -83,8 +83,8 @@ changes code, and on demand.
 ## After it passes
 
 1. Set up the real register. See Setup in the README.
-2. Then uncomment the `schedule:` lines at the top of
-   `.github/workflows/inbox.yml` and `monthly.yml`.
+2. The daily check and the monthly run in `.github/workflows/` then run on
+   their schedules against it.
 
 Run the live test again after any change to how the workbook is read or
 written.

@@ -10,7 +10,7 @@
    tests. Validate association account access and real export shapes before
    relying on those feeds. No-shows require evidence of check-in at the event.
 4. Monthly approval loop, atomic workbook updates and the brief are implemented.
-   The two schedules stay off until the real register is set up.
+   The daily check and the monthly run are scheduled.
 
 ## Next skills
 

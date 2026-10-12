@@ -2,10 +2,10 @@
 
 ## Monthly, membership data owner
 
-1. The monthly run carries out last month's decisions, then reconciles, adds
-   to the `proposals` tab and writes the `brief_register_YYYY-MM` tab. Until
-   the schedule is switched on, start it by hand: Actions, `monthly-run`, Run
-   workflow.
+1. On the 1st the monthly run starts and waits in Actions for your approval.
+   It carries out last month's decisions, then reconciles, adds to the
+   `proposals` tab and writes the `brief_register_YYYY-MM` tab. To run it at
+   another time: Actions, `monthly-run`, Run workflow.
 2. Open `proposals`. Set `approve` to `yes` or `no` on each row. Leave it blank
    to decide later.
 3. Payment items go to the treasurer, who updates the INSEAD portal. `yes`
@@ -99,9 +99,9 @@ as a question until one row is removed.
 ## New INSEAD export or payments sheet
 
 Drop it in the inbox folder. Any filename, CSV or XLSX. In a workbook the data
-must be on the first sheet. The inbox check counts it (daily, once its
-schedule is on) and the monthly run uses it. If the check reports a file as
-`unknown` or `unreadable`, it was not used. Check it is the right export.
+must be on the first sheet. The daily inbox check counts it and the monthly
+run uses it. If the check reports a file as `unknown` or `unreadable`, it was
+not used. Check it is the right export.
 
 If there are several INSEAD exports in the inbox, the most recently modified
 one is used. An export filtered to active members would make every other

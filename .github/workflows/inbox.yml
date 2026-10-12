@@ -5,10 +5,10 @@ name: inbox-check
 # Environment "prod-check" has no required reviewer. Give it a service account
 # that can only view the register and the inbox folder.
 #
-# Manual for now. Add the schedule back once the real register is set up:
-#   schedule:
-#     - cron: "30 5 * * *"
+# Runs daily at 05:30 UTC, and by hand.
 on:
+  schedule:
+    - cron: "30 5 * * *"
   workflow_dispatch:
 permissions:
   contents: read
