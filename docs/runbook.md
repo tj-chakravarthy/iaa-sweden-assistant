@@ -154,7 +154,11 @@ the proposals or changelog headers; a mismatched append is refused.
   anything, so that no column's data is lost. Put the headings back and run
   again.
 - Never edit `members` by hand. Add a row to `proposals`, write `yes` and let
-  the run apply it, so the changelog stays complete.
+  the run apply it, so the changelog stays complete. On the real register the
+  `members` and `changelog` tabs are protected (Data > Protect sheets and
+  ranges) so that only the owner and the writing service account can edit
+  them. A run updates a tab in place, so the protection stays. If a commit
+  fails with a 403, check that the service account is still listed there.
 
 ## Local dry run
 
